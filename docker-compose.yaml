@@ -1,0 +1,33 @@
+services:
+  mongodb:
+    image: mongo:6.0
+    container_name: tiendabox-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: tiendabox
+      MONGO_INITDB_DATABASE: tiendabox_mg
+    volumes:
+      - mongodb_data:/data/db
+
+  postgres:
+    image: postgres:15
+    container_name: tiendabox-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: tiendabox
+      POSTGRES_DB: tiendabox_pg
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      
+
+volumes:
+  mongodb_data: 
+    driver: local
+  postgres_data:
+    driver: local

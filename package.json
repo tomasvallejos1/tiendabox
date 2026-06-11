@@ -1,0 +1,36 @@
+{
+  "name": "tiendabox",
+  "version": "1.0.0",
+  "description": "Trabajo de la materia desarrollo de software",
+  "main": "dist/init.js",
+  "scripts": {
+    "dev": "nodemon --exec ts-node src/init.ts",
+    "build": "tsc",
+    "start": "node dist/init.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tomasvallejos1/tiendabox.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/tomasvallejos1/tiendabox/issues"
+  },
+  "homepage": "https://github.com/tomasvallejos1/tiendabox#readme",
+  "engines": {
+    "node": ">=22 <23"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.3",
+    "nodemon": "^3.1.14",
+    "ts-node": "^10.9.2",
+    "typescript": "^6.0.3"
+  },
+  "dependencies": {
+    "express": "^5.2.1"
+  }
+}
