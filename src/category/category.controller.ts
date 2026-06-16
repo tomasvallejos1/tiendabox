@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { CategoryService } from "./category.service";
-import { ValidationError } from "../errors";
+import { ConflictError, ValidationError } from "../errors";
 
 // Recibe Request/Response, llama al service y devuelve codigos HTTP.
 export class CategoryController {
@@ -66,10 +66,14 @@ export class CategoryController {
     }
   };
 
-  // Mapea errores a codigos HTTP: 400 validacion, 500 inesperado.
+  // Mapea errores a codigos HTTP: 400 validacion, 409 conflicto, 500 inesperado.
   private handleError(res: Response, error: unknown): void {
     if (error instanceof ValidationError) {
       res.status(400).json({ error: error.message });
+      return;
+    }
+    if (error instanceof ConflictError) {
+      res.status(409).json({ error: error.message });
       return;
     }
     console.error(error);

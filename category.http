@@ -14,7 +14,7 @@ Content-Type: application/json
 }
 
 ### Pegar aca el id devuelto por el POST anterior
-@categoryId = REEMPLAZAR_CON_ID
+@categoryId = 6a31a2872915ac8a7c6afde2
 
 ### 2. Crear categoria sin name -> 400 Bad Request
 POST {{host}}/api/category

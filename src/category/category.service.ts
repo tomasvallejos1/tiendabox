@@ -1,6 +1,6 @@
 import { Category } from "./category.entity";
 import { ICategoryRepository } from "./category.repository.interface";
-import { ValidationError } from "../errors";
+import { ConflictError, ValidationError } from "../errors";
 
 const NAME_MAX_LENGTH = 100;
 
@@ -19,6 +19,7 @@ export class CategoryService {
   async create(input: { name?: unknown; description?: unknown }): Promise<Category> {
     const name = this.validateName(input.name);
     const description = this.normalizeDescription(input.description);
+    await this.ensureNameIsUnique(name);
     return this.repository.create({ name, description });
   }
 
@@ -39,11 +40,24 @@ export class CategoryService {
       throw new ValidationError("El body no puede estar vacio");
     }
 
+    if (data.name !== undefined) {
+      await this.ensureNameIsUnique(data.name, id);
+    }
+
     return this.repository.update(id, data);
   }
 
   async delete(id: string): Promise<boolean> {
     return this.repository.delete(id);
+  }
+
+  // Rechaza nombres ya usados por otra categoria (case-insensitive).
+  // excludeId permite que una categoria conserve su propio nombre al actualizar.
+  private async ensureNameIsUnique(name: string, excludeId?: string): Promise<void> {
+    const existing = await this.repository.getByName(name);
+    if (existing && existing.id !== excludeId) {
+      throw new ConflictError(`Ya existe una categoria con el nombre '${name}'`);
+    }
   }
 
   // name obligatorio, string, no vacio y de maximo 100 caracteres

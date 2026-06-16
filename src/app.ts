@@ -22,16 +22,17 @@ export class App {
     await this.factory.connect();
 
     this.app.use(express.json());
-    this.registerRoutes();
+    await this.registerRoutes();
 
     this.app.listen(this.config.port, () => {
       console.log(`TiendaBox escuchando en http://localhost:${this.config.port}`);
     });
   }
 
-  // Construye la cadena de cada recurso y monta las rutas bajo /api.
-  private registerRoutes(): void {
+  // Construye la cadena de cada recurso, asegura indices y monta las rutas bajo /api.
+  private async registerRoutes(): Promise<void> {
     const categoryRepository = this.factory.createCategoryRepository();
+    await categoryRepository.createIndexes();
     const categoryService = new CategoryService(categoryRepository);
     const categoryController = new CategoryController(categoryService);
 
