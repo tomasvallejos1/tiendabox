@@ -1,0 +1,68 @@
+### TiendaBox - Pruebas del recurso Category
+### Requiere: docker compose up -d  +  npm run dev
+### En VS Code usar la extension "REST Client". Cada bloque se ejecuta con "Send Request".
+
+@host = http://localhost:3000
+
+### 1. Crear categoria -> 201 Created (copiar el "id" del body a @categoryId)
+POST {{host}}/api/category
+Content-Type: application/json
+
+{
+  "name": "Notebooks",
+  "description": "Computadoras portatiles"
+}
+
+### Pegar aca el id devuelto por el POST anterior
+@categoryId = REEMPLAZAR_CON_ID
+
+### 2. Crear categoria sin name -> 400 Bad Request
+POST {{host}}/api/category
+Content-Type: application/json
+
+{}
+
+### 3. Crear categoria con name > 100 caracteres -> 400 Bad Request
+POST {{host}}/api/category
+Content-Type: application/json
+
+{
+  "name": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAX"
+}
+
+### 4. Listar todas las categorias -> 200 OK
+GET {{host}}/api/categories
+
+### 5. Obtener categoria por id -> 200 OK
+GET {{host}}/api/category/{{categoryId}}
+
+### 6. Obtener categoria inexistente -> 404 Not Found
+GET {{host}}/api/category/000000000000000000000000
+
+### 7. Actualizar categoria -> 200 OK
+PUT {{host}}/api/category/{{categoryId}}
+Content-Type: application/json
+
+{
+  "description": "Notebooks y ultrabooks"
+}
+
+### 8. Actualizar con body vacio -> 400 Bad Request
+PUT {{host}}/api/category/{{categoryId}}
+Content-Type: application/json
+
+{}
+
+### 9. Actualizar categoria inexistente -> 404 Not Found
+PUT {{host}}/api/category/000000000000000000000000
+Content-Type: application/json
+
+{
+  "name": "Otra"
+}
+
+### 10. Eliminar categoria -> 204 No Content
+DELETE {{host}}/api/category/{{categoryId}}
+
+### 11. Eliminar de nuevo la misma categoria -> 404 Not Found
+DELETE {{host}}/api/category/{{categoryId}}
