@@ -1,0 +1,20 @@
+meta {
+  name: Update Product Stock
+  type: http
+  seq: 7
+}
+
+put {
+  url: {{baseUrl}}/api/product/{{productId}}
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "price": 79.5,
+    "stock": 5
+  }
+}

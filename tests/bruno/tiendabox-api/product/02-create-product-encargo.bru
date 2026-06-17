@@ -1,0 +1,22 @@
+meta {
+  name: Create Product Encargo
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/product
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Orden especial",
+    "type": "encargo",
+    "category_id": "{{categoryId}}",
+    "brand_id": "{{brandId}}"
+  }
+}

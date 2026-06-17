@@ -1,0 +1,93 @@
+### TiendaBox - Pruebas del recurso Product
+### Requiere: docker compose up -d  +  npm run dev
+### En VS Code usar la extension "REST Client". Cada bloque se ejecuta con "Send Request".
+
+@host = http://localhost:3000
+
+### Variables: reemplazar o crear con ids validos (pueden obtenerse al crear una Category y una Brand de prueba)
+@categoryId = 
+@brandId = 
+@productId = 
+
+### 1. Crear producto en stock -> 201 Created (copiar el "id" del body a @productId)
+POST {{host}}/api/product
+Content-Type: application/json
+
+{
+  "name": "Auriculares XYZ",
+  "description": "Auriculares con cancelacion",
+  "type": "stock",
+  "price": 99.99,
+  "stock": 10,
+  "category_id": "{{categoryId}}",
+  "brand_id": "{{brandId}}"
+}
+
+### Pegar aca el id devuelto por el POST anterior
+@productId = 
+
+### 2. Crear producto por encargo -> 201 Created
+POST {{host}}/api/product
+Content-Type: application/json
+
+{
+  "name": "Orden especial",
+  "type": "encargo",
+  "category_id": "{{categoryId}}",
+  "brand_id": "{{brandId}}"
+}
+
+### 3. Listar todos los productos -> 200 OK
+GET {{host}}/api/products
+
+### 4. Filtrar por category_id -> 200 OK
+GET {{host}}/api/products?category_id={{categoryId}}
+
+### 5. Filtrar por brand_id -> 200 OK
+GET {{host}}/api/products?brand_id={{brandId}}
+
+### 6. Obtener producto por id -> 200 OK
+GET {{host}}/api/product/{{productId}}
+
+### 7. Actualizar precio y stock -> 200 OK
+PUT {{host}}/api/product/{{productId}}
+Content-Type: application/json
+
+{
+  "price": 79.5,
+  "stock": 5
+}
+
+### 8. Cambiar de stock a encargo (debe forzar price=null y stock=0) -> 200 OK
+PUT {{host}}/api/product/{{productId}}
+Content-Type: application/json
+
+{
+  "type": "encargo"
+}
+
+### 9. Baja logica (soft delete) -> 204 No Content
+DELETE {{host}}/api/product/{{productId}}
+
+### 10. Crear producto tipo stock SIN price -> 400 Bad Request (falla)
+POST {{host}}/api/product
+Content-Type: application/json
+
+{
+  "name": "Producto fallo",
+  "type": "stock",
+  "stock": 5,
+  "category_id": "{{categoryId}}",
+  "brand_id": "{{brandId}}"
+}
+
+### 11. Crear producto con type invalido -> 400 Bad Request (falla)
+POST {{host}}/api/product
+Content-Type: application/json
+
+{
+  "name": "Producto invalido",
+  "type": "otro",
+  "category_id": "{{categoryId}}",
+  "brand_id": "{{brandId}}"
+}

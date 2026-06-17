@@ -1,0 +1,9 @@
+meta {
+  name: Filter Products By Brand
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/api/products?brand_id={{brandId}}
+}
