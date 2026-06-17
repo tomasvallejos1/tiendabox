@@ -1,0 +1,19 @@
+meta {
+  name: Change Product To Encargo
+  type: http
+  seq: 8
+}
+
+put {
+  url: {{baseUrl}}/api/product/{{productId}}
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "type": "encargo"
+  }
+}

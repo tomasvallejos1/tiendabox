@@ -1,0 +1,23 @@
+meta {
+  name: Create Product Stock Without Price
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/api/product
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Producto fallo",
+    "type": "stock",
+    "stock": 5,
+    "category_id": "{{categoryId}}",
+    "brand_id": "{{brandId}}"
+  }
+}
