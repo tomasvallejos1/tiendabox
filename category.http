@@ -9,8 +9,8 @@ POST {{host}}/api/category
 Content-Type: application/json
 
 {
-  "name": "Notebooks",
-  "description": "Computadoras portatiles"
+  "name": "Celulares",
+  "description": "celuuuusss"
 }
 
 ### Pegar aca el id devuelto por el POST anterior
