@@ -1,0 +1,20 @@
+meta {
+  name: Create Category
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/category
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Celulares",
+    "description": "celuuuusss"
+  }
+}

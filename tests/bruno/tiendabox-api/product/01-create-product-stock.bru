@@ -1,0 +1,25 @@
+meta {
+  name: Create Product Stock
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/product
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Auriculares XYZ",
+    "description": "Auriculares con cancelacion",
+    "type": "stock",
+    "price": 99.99,
+    "stock": 10,
+    "category_id": "{{categoryId}}",
+    "brand_id": "{{brandId}}"
+  }
+}

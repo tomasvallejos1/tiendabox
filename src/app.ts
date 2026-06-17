@@ -4,6 +4,9 @@ import { DatabaseProviderFactory } from "./db/database-provider.factory";
 import { CategoryService } from "./category/category.service";
 import { CategoryController } from "./category/category.controller";
 import { createCategoryRoutes } from "./category/category.routes";
+import { ProductService } from "./product/product.service";
+import { ProductController } from "./product/product.controller";
+import { createProductRoutes } from "./product/product.routes";
 
 // Composicion principal: crea Express, conecta la base e inyecta dependencias
 // manualmente (repository -> service -> controller -> routes).
@@ -37,5 +40,11 @@ export class App {
     const categoryController = new CategoryController(categoryService);
 
     this.app.use("/api", createCategoryRoutes(categoryController));
+
+    const productRepository = this.factory.createProductRepository();
+    const productService = new ProductService(productRepository);
+    const productController = new ProductController(productService);
+
+    this.app.use("/api", createProductRoutes(productController));
   }
 }

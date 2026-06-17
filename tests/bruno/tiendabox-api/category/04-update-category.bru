@@ -1,0 +1,19 @@
+meta {
+  name: Update Category
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{baseUrl}}/api/category/{{categoryId}}
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "description": "Notebooks y ultrabooks"
+  }
+}
