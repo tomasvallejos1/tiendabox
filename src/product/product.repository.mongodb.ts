@@ -2,7 +2,6 @@ import { Collection, Db, ObjectId, WithId, Document } from "mongodb";
 import { Product, ProductType } from "./product.entity";
 import { IProductRepository, ProductFilter } from "./product.repository.interface";
 
-
 export class ProductRepositoryMongoDB implements IProductRepository {
   private readonly collection: Collection<Document>;
 
@@ -76,7 +75,7 @@ export class ProductRepositoryMongoDB implements IProductRepository {
       return false;
     }
     const result = await this.collection.updateOne(
-      { _id: new ObjectId(id) },
+      { _id: new ObjectId(id), is_active: true },
       { $set: { is_active: false } },
     );
     return result.modifiedCount === 1;

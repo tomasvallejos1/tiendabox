@@ -4,13 +4,15 @@ import { DatabaseProviderFactory } from "./db/database-provider.factory";
 import { CategoryService } from "./category/category.service";
 import { CategoryController } from "./category/category.controller";
 import { createCategoryRoutes } from "./category/category.routes";
-import { createBrandRouter } from './brand/brand.routes';
-import { createCustomerRouter } from './customer/customer.routes';
+import { BrandService } from "./brand/brand.service";
+import { BrandController } from "./brand/brand.controller";
+import { createBrandRoutes } from "./brand/brand.routes";
+import { CustomerService } from "./customer/customer.service";
+import { CustomerController } from "./customer/customer.controller";
+import { createCustomerRoutes } from "./customer/customer.routes";
 import { ProductService } from "./product/product.service";
 import { ProductController } from "./product/product.controller";
 import { createProductRoutes } from "./product/product.routes";
-import { createCustomerRouter } from './customer/customer.routes';
-// ...
 
 // Composicion principal: crea Express, conecta la base e inyecta dependencias
 // manualmente (repository -> service -> controller -> routes).
@@ -42,18 +44,25 @@ export class App {
     await categoryRepository.createIndexes();
     const categoryService = new CategoryService(categoryRepository);
     const categoryController = new CategoryController(categoryService);
-    const db = this.factory.getDb();
-
     this.app.use("/api", createCategoryRoutes(categoryController));
-    // Montamos los routers inyectando la conexión a Mongo (db)
-    this.app.use('/api/brand', createBrandRouter(db));
-    this.app.use('/api/customer', createCustomerRouter(db));
+
+    const brandRepository = this.factory.createBrandRepository();
+    const brandService = new BrandService(brandRepository);
+    const brandController = new BrandController(brandService);
+    this.app.use("/api", createBrandRoutes(brandController));
+
+    const customerRepository = this.factory.createCustomerRepository();
+    const customerService = new CustomerService(customerRepository);
+    const customerController = new CustomerController(customerService);
+    this.app.use("/api", createCustomerRoutes(customerController));
 
     const productRepository = this.factory.createProductRepository();
-    const productService = new ProductService(productRepository);
+    const productService = new ProductService(
+      productRepository,
+      categoryRepository,
+      brandRepository,
+    );
     const productController = new ProductController(productService);
-
     this.app.use("/api", createProductRoutes(productController));
-    this.app.use('/api/customer', createCustomerRouter(this.factory.getDb()));
   }
 }

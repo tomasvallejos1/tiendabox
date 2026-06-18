@@ -1,10 +1,11 @@
-import { Customer } from './customer.entity';
+import { Customer } from "./customer.entity";
 
-export interface CustomerRepository {
-  createCustomer(data: Omit<Customer, 'id'>): Promise<Customer>;
-  getCustomers(): Promise<Customer[]>;
-  getCustomerById(id: string): Promise<Customer | null>;
-  getCustomerByEmail(email: string): Promise<Customer | null>;
-  updateCustomer(id: string, data: Partial<Omit<Customer, 'id'>>): Promise<Customer | null>;
-  deleteCustomer(id: string): Promise<boolean>;
+// Contrato del repositorio de Customer. Los ids son siempre string.
+export interface ICustomerRepository {
+  create(data: Omit<Customer, "id">): Promise<Customer>;
+  getById(id: string): Promise<Customer | null>;
+  getByEmail(email: string): Promise<Customer | null>;
+  getAll(): Promise<Customer[]>;
+  update(id: string, data: Partial<Omit<Customer, "id">>): Promise<Customer | null>;
+  delete(id: string): Promise<boolean>;
 }

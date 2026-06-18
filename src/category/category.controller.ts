@@ -39,10 +39,7 @@ export class CategoryController {
 
   update = async (req: Request, res: Response): Promise<void> => {
     try {
-      const category = await this.service.update(
-        req.params["id"] as string,
-        req.body,
-      );
+      const category = await this.service.update(req.params["id"] as string, req.body);
       if (!category) {
         res.status(404).json({ error: "Categoria no encontrada" });
         return;

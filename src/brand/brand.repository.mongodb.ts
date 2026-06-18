@@ -1,56 +1,75 @@
-import { Collection, Db, ObjectId } from 'mongodb';
-import { Brand } from './brand.entity';
-import { BrandRepository } from './brand.repository.interface';
+import { Collection, Db, ObjectId, WithId, Document } from "mongodb";
+import { Brand } from "./brand.entity";
+import { IBrandRepository } from "./brand.repository.interface";
 
-export class BrandMongoRepository implements BrandRepository {
-  private collection: Collection;
+// Implementacion del repositorio que SOLO habla con MongoDB.
+export class BrandMongoRepository implements IBrandRepository {
+  private readonly collection: Collection<Document>;
 
   constructor(db: Db) {
-    this.collection = db.collection('brands');
+    this.collection = db.collection("brands");
   }
 
-  // Utilidad para mapear _id a id de forma limpia
-  private mapToBrand(doc: any): Brand {
-    const { _id, ...rest } = doc;
-    return { id: _id.toString(), ...rest } as Brand;
+  async create(data: Omit<Brand, "id">): Promise<Brand> {
+    const result = await this.collection.insertOne({
+      name: data.name,
+      logo_url: data.logo_url,
+    });
+    return {
+      id: result.insertedId.toString(),
+      name: data.name,
+      logo_url: data.logo_url,
+    };
   }
 
-  async createBrand(data: Omit<Brand, 'id'>): Promise<Brand> {
-    const result = await this.collection.insertOne(data);
-    return { id: result.insertedId.toString(), ...data };
+  async getById(id: string): Promise<Brand | null> {
+    if (!ObjectId.isValid(id)) {
+      return null;
+    }
+    const doc = await this.collection.findOne({ _id: new ObjectId(id) });
+    return doc ? this.toEntity(doc) : null;
   }
 
-  async getBrands(): Promise<Brand[]> {
-    const brands = await this.collection.find().toArray();
-    return brands.map(this.mapToBrand);
+  // Busqueda por nombre sin distinguir mayusculas/minusculas (collation strength 2).
+  async getByName(name: string): Promise<Brand | null> {
+    const doc = await this.collection.findOne(
+      { name },
+      { collation: { locale: "es", strength: 2 } },
+    );
+    return doc ? this.toEntity(doc) : null;
   }
 
-  async getBrandById(id: string): Promise<Brand | null> {
-    if (!ObjectId.isValid(id)) return null;
-    const brand = await this.collection.findOne({ _id: new ObjectId(id) });
-    return brand ? this.mapToBrand(brand) : null;
+  async getAll(): Promise<Brand[]> {
+    const docs = await this.collection.find().toArray();
+    return docs.map((doc) => this.toEntity(doc));
   }
 
-  async getBrandByName(name: string): Promise<Brand | null> {
-    const brand = await this.collection.findOne({ name });
-    return brand ? this.mapToBrand(brand) : null;
-  }
-
-  async updateBrand(id: string, data: Partial<Omit<Brand, 'id'>>): Promise<Brand | null> {
-    if (!ObjectId.isValid(id)) return null;
-    const result = await this.collection.findOneAndUpdate(
+  async update(id: string, data: Partial<Omit<Brand, "id">>): Promise<Brand | null> {
+    if (!ObjectId.isValid(id)) {
+      return null;
+    }
+    const doc = await this.collection.findOneAndUpdate(
       { _id: new ObjectId(id) },
       { $set: data },
-      { returnDocument: 'after' } // Devuelve el documento actualizado
+      { returnDocument: "after" },
     );
-    // Nota: Según la versión del driver de MongoDB, result podría ser directamente el documento o venir dentro de result.value.
-    // Asumimos el driver moderno donde retorna el doc (o adaptarlo a result.value si usas MongoDB < 6)
-    return result ? this.mapToBrand(result) : null;
+    return doc ? this.toEntity(doc) : null;
   }
 
-  async deleteBrand(id: string): Promise<boolean> {
-    if (!ObjectId.isValid(id)) return false;
+  async delete(id: string): Promise<boolean> {
+    if (!ObjectId.isValid(id)) {
+      return false;
+    }
     const result = await this.collection.deleteOne({ _id: new ObjectId(id) });
     return result.deletedCount === 1;
+  }
+
+  // Mapea el documento de Mongo (_id ObjectId) a la entidad (id string).
+  private toEntity(doc: WithId<Document>): Brand {
+    return {
+      id: doc._id.toString(),
+      name: doc["name"] as string,
+      logo_url: (doc["logo_url"] ?? null) as string | null,
+    };
   }
 }
