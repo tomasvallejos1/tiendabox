@@ -6,25 +6,24 @@ import { ValidationError } from "../errors";
 export class ProductController {
   constructor(private readonly service: ProductService) {}
 
-getAll = async (req: Request, res: Response): Promise<void> => {
-  try {
-  
-    const filter: ProductFilter = {};
-    if (typeof req.query.category_id === 'string') {
-      filter.category_id = req.query.category_id;
-    }
-    if (typeof req.query.brand_id === 'string') {
-      filter.brand_id = req.query.brand_id;
-    }
+  getAll = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const filter: ProductFilter = {};
+      if (typeof req.query.category_id === "string") {
+        filter.category_id = req.query.category_id;
+      }
+      if (typeof req.query.brand_id === "string") {
+        filter.brand_id = req.query.brand_id;
+      }
 
-    const products = await this.service.getAll(filter);
-    
-    res.status(200).json(products);
-  } catch (error) {
-    this.handleError(res, error);
-  }
-};
-  
+      const products = await this.service.getAll(filter);
+
+      res.status(200).json(products);
+    } catch (error) {
+      this.handleError(res, error);
+    }
+  };
+
   getById = async (req: Request, res: Response): Promise<void> => {
     try {
       const product = await this.service.getById(req.params["id"] as string);

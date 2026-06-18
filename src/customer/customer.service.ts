@@ -1,81 +1,78 @@
-import { Customer } from './customer.entity';
-import { CustomerRepository } from './customer.repository.interface';
+import { Customer } from "./customer.entity";
+import { ICustomerRepository } from "./customer.repository.interface";
+import { ConflictError, ValidationError } from "../errors";
 
+// Rol asignado por defecto a todo cliente creado.
+const DEFAULT_ROLE = "cliente";
+
+// Reglas de negocio de Customer. Delega la persistencia en el repositorio.
 export class CustomerService {
-  constructor(private repo: CustomerRepository) {}
+  constructor(private readonly repository: ICustomerRepository) {}
 
-  async createCustomer(data: any): Promise<Customer> {
-    // 1. Validar nombre
-    if (!data.name || typeof data.name !== 'string' || data.name.trim() === '') {
-      throw new Error('BAD_REQUEST: El nombre del cliente es obligatorio.');
-    }
-    
-    // 2. Validar email (existencia y formato con @)
-    if (!data.email || typeof data.email !== 'string' || !data.email.includes('@')) {
-      throw new Error('BAD_REQUEST: Debe proporcionar un email válido.');
-    }
-
-    // 3. Validar unicidad del email
-    const existingCustomer = await this.repo.getCustomerByEmail(data.email);
-    if (existingCustomer) {
-      throw new Error('BAD_REQUEST: Ya existe un cliente con ese email.');
-    }
-
-    // 4. Armar el objeto forzando el rol
-    const newCustomerData = {
-      name: data.name,
-      email: data.email,
-      role: 'cliente' // Hardcodeado según las reglas de negocio
-    };
-
-    return await this.repo.createCustomer(newCustomerData);
+  async getAll(): Promise<Customer[]> {
+    return this.repository.getAll();
   }
 
-  async getCustomers(): Promise<Customer[]> {
-    return await this.repo.getCustomers();
+  async getById(id: string): Promise<Customer | null> {
+    return this.repository.getById(id);
   }
 
-  async getCustomerById(id: string): Promise<Customer> {
-    const customer = await this.repo.getCustomerById(id);
-    if (!customer) throw new Error('NOT_FOUND: Cliente no encontrado.');
-    return customer;
+  async create(input: { name?: unknown; email?: unknown }): Promise<Customer> {
+    const name = this.validateName(input.name);
+    const email = this.validateEmail(input.email);
+    await this.ensureEmailIsUnique(email);
+    // El rol se fuerza por reglas de negocio, no se acepta desde el body.
+    return this.repository.create({ name, email, role: DEFAULT_ROLE });
   }
 
-  async updateCustomer(id: string, data: any): Promise<Customer> {
-    // 1. Validar body no vacío
-    if (!data || Object.keys(data).length === 0) {
-      throw new Error('BAD_REQUEST: El cuerpo de la petición no puede estar vacío.');
+  async update(id: string, input: { name?: unknown; email?: unknown }): Promise<Customer | null> {
+    const data: Partial<Omit<Customer, "id">> = {};
+
+    if (input.name !== undefined) {
+      data.name = this.validateName(input.name);
+    }
+    if (input.email !== undefined) {
+      data.email = this.validateEmail(input.email);
     }
 
-    // 2. Si cambian el email, validar formato y unicidad
+    // El campo role se ignora silenciosamente: no se puede modificar desde el body.
+    if (Object.keys(data).length === 0) {
+      throw new ValidationError("El body no puede estar vacío");
+    }
+
     if (data.email !== undefined) {
-      if (typeof data.email !== 'string' || !data.email.includes('@')) {
-        throw new Error('BAD_REQUEST: El email proporcionado no es válido.');
-      }
-      const existingCustomer = await this.repo.getCustomerByEmail(data.email);
-      if (existingCustomer && existingCustomer.id !== id) {
-        throw new Error('BAD_REQUEST: El email ya está en uso por otro cliente.');
-      }
+      await this.ensureEmailIsUnique(data.email, id);
     }
 
-    // 3. Si mandan un nombre, que no esté vacío
-    if (data.name !== undefined && (typeof data.name !== 'string' || data.name.trim() === '')) {
-       throw new Error('BAD_REQUEST: El nombre no puede estar vacío.');
-    }
-
-    // Nota: El service ignora silenciosamente si el front intenta mandar un "role" distinto
-    const updateData: Partial<Omit<Customer, 'id'>> = {};
-    if (data.name !== undefined) updateData.name = data.name;
-    if (data.email !== undefined) updateData.email = data.email;
-
-    const updatedCustomer = await this.repo.updateCustomer(id, updateData);
-    if (!updatedCustomer) throw new Error('NOT_FOUND: Cliente no encontrado.');
-    
-    return updatedCustomer;
+    return this.repository.update(id, data);
   }
 
-  async deleteCustomer(id: string): Promise<void> {
-    const deleted = await this.repo.deleteCustomer(id);
-    if (!deleted) throw new Error('NOT_FOUND: Cliente no encontrado.');
+  async delete(id: string): Promise<boolean> {
+    return this.repository.delete(id);
+  }
+
+  // Rechaza emails ya usados por otro cliente (case-insensitive).
+  // excludeId permite que un cliente conserve su propio email al actualizar.
+  private async ensureEmailIsUnique(email: string, excludeId?: string): Promise<void> {
+    const existing = await this.repository.getByEmail(email);
+    if (existing && existing.id !== excludeId) {
+      throw new ConflictError(`Ya existe un cliente con el email '${email}'`);
+    }
+  }
+
+  // name obligatorio, string y no vacio
+  private validateName(value: unknown): string {
+    if (typeof value !== "string" || value.trim().length === 0) {
+      throw new ValidationError("El campo 'name' es obligatorio");
+    }
+    return value.trim();
+  }
+
+  // email obligatorio, string y con formato basico (contiene '@')
+  private validateEmail(value: unknown): string {
+    if (typeof value !== "string" || !value.includes("@")) {
+      throw new ValidationError("El campo 'email' debe ser un email válido");
+    }
+    return value.trim();
   }
 }

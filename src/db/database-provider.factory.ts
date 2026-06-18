@@ -4,6 +4,10 @@ import { ICategoryRepository } from "../category/category.repository.interface";
 import { CategoryRepositoryMongoDB } from "../category/category.repository.mongodb";
 import { IProductRepository } from "../product/product.repository.interface";
 import { ProductRepositoryMongoDB } from "../product/product.repository.mongodb";
+import { IBrandRepository } from "../brand/brand.repository.interface";
+import { BrandMongoRepository } from "../brand/brand.repository.mongodb";
+import { ICustomerRepository } from "../customer/customer.repository.interface";
+import { CustomerMongoRepository } from "../customer/customer.repository.mongodb";
 
 // Centraliza la creacion de repositorios y las conexiones a las bases.
 // Preparado para sumar PostgreSQL mas adelante.
@@ -26,6 +30,18 @@ export class DatabaseProviderFactory {
     return new CategoryRepositoryMongoDB(this.getDb());
   }
 
+  createProductRepository(): IProductRepository {
+    return new ProductRepositoryMongoDB(this.getDb());
+  }
+
+  createBrandRepository(): IBrandRepository {
+    return new BrandMongoRepository(this.getDb());
+  }
+
+  createCustomerRepository(): ICustomerRepository {
+    return new CustomerMongoRepository(this.getDb());
+  }
+
   public getDb(): Db {
     if (!this.mongoDb) {
       throw new Error("La conexion a MongoDB no fue inicializada. Llama a connect() primero.");
@@ -33,13 +49,8 @@ export class DatabaseProviderFactory {
     return this.mongoDb;
   }
 
-  createProductRepository(): IProductRepository {
-    return new ProductRepositoryMongoDB(this.getDb());
-  }
-
   // Cierra las conexiones abiertas.
   async close(): Promise<void> {
     await this.mongoClient.close();
   }
 }
-
