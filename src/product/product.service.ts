@@ -1,18 +1,38 @@
 import { Product, ProductType } from "./product.entity";
 import { IProductRepository, ProductFilter } from "./product.repository.interface";
+import type { ICategoryRepository } from "../category/category.repository.interface";
+import type { BrandRepository } from "../brand/brand.repository.interface";
 import { ValidationError } from "../errors";
 
 const NAME_MAX_LENGTH = 100;
 
 export class ProductService {
-  constructor(private readonly repository: IProductRepository) {}
+  constructor(
+    private readonly repository: IProductRepository,
+    private readonly categoryRepository: ICategoryRepository,
+    private readonly brandRepository: BrandRepository,
+  ) {}
+  
 
   async getAll(filter?: ProductFilter): Promise<Product[]> {
     return this.repository.getAll(filter);
   }
 
-  async getById(id: string): Promise<Product | null> {
-    return this.repository.getById(id);
+async getById(id: string): Promise<any | null> {
+    const product = await this.repository.getById(id);
+    
+    if (!product) {
+      return null;
+    }
+
+    const category = await this.categoryRepository.getById(product.category_id);
+    const brand = await this.brandRepository.getBrandById(product.brand_id);
+
+    return {
+      ...product,
+      category_name: category ? category.name : 'Sin categoría',
+      brand_name: brand ? brand.name : 'Sin marca'
+    };
   }
 
   async create(input: {

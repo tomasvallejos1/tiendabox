@@ -1,27 +1,30 @@
 import { Request, Response } from "express";
 import { ProductService } from "./product.service";
+import { ProductFilter } from "./product.repository.interface";
 import { ValidationError } from "../errors";
 
-// Recibe Request/Response, llama al service y devuelve codigos HTTP.
 export class ProductController {
   constructor(private readonly service: ProductService) {}
 
-  getAll = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const filter: { category_id?: string; brand_id?: string } = {};
-      if (typeof req.query.category_id === "string") {
-        filter.category_id = req.query.category_id;
-      }
-      if (typeof req.query.brand_id === "string") {
-        filter.brand_id = req.query.brand_id;
-      }
-      const products = await this.service.getAll(Object.keys(filter).length ? filter : undefined);
-      res.status(200).json(products);
-    } catch (error) {
-      this.handleError(res, error);
+getAll = async (req: Request, res: Response): Promise<void> => {
+  try {
+  
+    const filter: ProductFilter = {};
+    if (typeof req.query.category_id === 'string') {
+      filter.category_id = req.query.category_id;
     }
-  };
+    if (typeof req.query.brand_id === 'string') {
+      filter.brand_id = req.query.brand_id;
+    }
 
+    const products = await this.service.getAll(filter);
+    
+    res.status(200).json(products);
+  } catch (error) {
+    this.handleError(res, error);
+  }
+};
+  
   getById = async (req: Request, res: Response): Promise<void> => {
     try {
       const product = await this.service.getById(req.params["id"] as string);

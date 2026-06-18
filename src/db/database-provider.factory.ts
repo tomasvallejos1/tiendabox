@@ -34,7 +34,7 @@ export class DatabaseProviderFactory {
   }
 
   createProductRepository(): IProductRepository {
-    return new ProductRepositoryMongoDB(this.getMongoDb());
+    return new ProductRepositoryMongoDB(this.getDb());
   }
 
   // Cierra las conexiones abiertas.

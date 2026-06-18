@@ -9,7 +9,7 @@ import { createCustomerRouter } from './customer/customer.routes';
 import { ProductService } from "./product/product.service";
 import { ProductController } from "./product/product.controller";
 import { createProductRoutes } from "./product/product.routes";
-import { createCustomerRouter } from './customer/customer.routes';
+import { BrandMongoRepository } from './brand/brand.repository.mongodb';
 // ...
 
 // Composicion principal: crea Express, conecta la base e inyecta dependencias
@@ -50,10 +50,14 @@ export class App {
     this.app.use('/api/customer', createCustomerRouter(db));
 
     const productRepository = this.factory.createProductRepository();
-    const productService = new ProductService(productRepository);
+    const brandRepository = new BrandMongoRepository(db);
+    const productService = new ProductService(
+      productRepository,
+      categoryRepository,
+      brandRepository,
+    );
     const productController = new ProductController(productService);
 
     this.app.use("/api", createProductRoutes(productController));
-    this.app.use('/api/customer', createCustomerRouter(this.factory.getDb()));
   }
 }
