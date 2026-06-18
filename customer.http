@@ -1,0 +1,25 @@
+### Crear un Cliente (Recordá que el backend le asigna automáticamente role: "cliente")
+POST http://localhost:3000/api/customer
+Content-Type: application/json
+
+{
+  "name": "Juan Pérez",
+  "email": "juan.perez@email.com"
+}
+
+### Listar todos los Clientes
+GET http://localhost:3000/api/customer
+
+### Ver un Cliente específico (Reemplazá el ID)
+GET http://localhost:3000/api/customer/64b5f9...
+
+### Editar un Cliente (Reemplazá el ID)
+PUT http://localhost:3000/api/customer/64b5f9...
+Content-Type: application/json
+
+{
+  "name": "Juan Martín Pérez"
+}
+
+### Borrar un Cliente (Reemplazá el ID)
+DELETE http://localhost:3000/api/customer/64b5f9...
