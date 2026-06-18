@@ -1,55 +1,79 @@
-import { Request, Response } from 'express';
-import { BrandService } from './brand.service';
+import { Request, Response } from "express";
+import { BrandService } from "./brand.service";
+import { ConflictError, ValidationError } from "../errors";
 
+// Recibe Request/Response, llama al service y devuelve codigos HTTP.
 export class BrandController {
-  constructor(private service: BrandService) {}
+  constructor(private readonly service: BrandService) {}
 
-  createBrand = async (req: Request, res: Response): Promise<void> => {
+  getAll = async (_req: Request, res: Response): Promise<void> => {
     try {
-      const brand = await this.service.createBrand(req.body);
-      res.status(201).json(brand);
-    } catch (error: any) {
-      res.status(400).json({ message: error.message.replace('BAD_REQUEST: ', '') });
-    }
-  };
-
-  getBrands = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const brands = await this.service.getBrands();
+      const brands = await this.service.getAll();
       res.status(200).json(brands);
-    } catch (error: any) {
-      res.status(500).json({ message: 'Error interno del servidor' });
+    } catch (error) {
+      this.handleError(res, error);
     }
   };
 
-  getBrandById = async (req: Request, res: Response): Promise<void> => {
+  getById = async (req: Request, res: Response): Promise<void> => {
     try {
-      const brand = await this.service.getBrandById(req.params["id"] as string);
-      res.status(200).json(brand);
-    } catch (error: any) {
-      res.status(404).json({ message: error.message.replace('NOT_FOUND: ', '') });
-    }
-  };
-
-  updateBrand = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const brand = await this.service.updateBrand(req.params["id"] as string, req.body);
-      res.status(200).json(brand);
-    } catch (error: any) {
-      if (error.message.includes('NOT_FOUND')) {
-        res.status(404).json({ message: error.message.replace('NOT_FOUND: ', '') });
-      } else {
-        res.status(400).json({ message: error.message.replace('BAD_REQUEST: ', '') });
+      const brand = await this.service.getById(req.params["id"] as string);
+      if (!brand) {
+        res.status(404).json({ error: "Marca no encontrada" });
+        return;
       }
+      res.status(200).json(brand);
+    } catch (error) {
+      this.handleError(res, error);
     }
   };
 
-  deleteBrand = async (req: Request, res: Response): Promise<void> => {
+  create = async (req: Request, res: Response): Promise<void> => {
     try {
-      await this.service.deleteBrand(req.params["id"] as string);
-      res.status(204).send(); 
-    } catch (error: any) {
-      res.status(404).json({ message: error.message.replace('NOT_FOUND: ', '') });
+      const brand = await this.service.create(req.body);
+      res.status(201).json(brand);
+    } catch (error) {
+      this.handleError(res, error);
     }
   };
+
+  update = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const brand = await this.service.update(req.params["id"] as string, req.body);
+      if (!brand) {
+        res.status(404).json({ error: "Marca no encontrada" });
+        return;
+      }
+      res.status(200).json(brand);
+    } catch (error) {
+      this.handleError(res, error);
+    }
+  };
+
+  delete = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const deleted = await this.service.delete(req.params["id"] as string);
+      if (!deleted) {
+        res.status(404).json({ error: "Marca no encontrada" });
+        return;
+      }
+      res.status(204).send();
+    } catch (error) {
+      this.handleError(res, error);
+    }
+  };
+
+  // Mapea errores a codigos HTTP: 400 validacion, 409 conflicto, 500 inesperado.
+  private handleError(res: Response, error: unknown): void {
+    if (error instanceof ValidationError) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+    if (error instanceof ConflictError) {
+      res.status(409).json({ error: error.message });
+      return;
+    }
+    console.error(error);
+    res.status(500).json({ error: "Error interno del servidor" });
+  }
 }

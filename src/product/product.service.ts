@@ -1,18 +1,37 @@
-import { Product, ProductType } from "./product.entity";
+import { Product, ProductType, ProductWithNames } from "./product.entity";
 import { IProductRepository, ProductFilter } from "./product.repository.interface";
+import type { ICategoryRepository } from "../category/category.repository.interface";
+import type { IBrandRepository } from "../brand/brand.repository.interface";
 import { ValidationError } from "../errors";
 
 const NAME_MAX_LENGTH = 100;
 
 export class ProductService {
-  constructor(private readonly repository: IProductRepository) {}
+  constructor(
+    private readonly repository: IProductRepository,
+    private readonly categoryRepository: ICategoryRepository,
+    private readonly brandRepository: IBrandRepository,
+  ) {}
 
   async getAll(filter?: ProductFilter): Promise<Product[]> {
     return this.repository.getAll(filter);
   }
 
-  async getById(id: string): Promise<Product | null> {
-    return this.repository.getById(id);
+  async getById(id: string): Promise<ProductWithNames | null> {
+    const product = await this.repository.getById(id);
+
+    if (!product) {
+      return null;
+    }
+
+    const category = await this.categoryRepository.getById(product.category_id);
+    const brand = await this.brandRepository.getById(product.brand_id);
+
+    return {
+      ...product,
+      category_name: category ? category.name : "Sin categoría",
+      brand_name: brand ? brand.name : "Sin marca",
+    };
   }
 
   async create(input: {
@@ -30,11 +49,7 @@ export class ProductService {
     const category_id = this.validateForeignId(input.category_id, "category_id");
     const brand_id = this.validateForeignId(input.brand_id, "brand_id");
 
-    const { price, stock } = this.resolvePriceAndStock(
-      type,
-      input.price,
-      input.stock,
-    );
+    const { price, stock } = this.resolvePriceAndStock(type, input.price, input.stock);
 
     const toCreate: Omit<Product, "id"> = {
       name,
@@ -106,7 +121,7 @@ export class ProductService {
     }
 
     if (Object.keys(data).length === 0) {
-      throw new ValidationError("El body no puede estar vacio");
+      throw new ValidationError("El body no puede estar vacío");
     }
 
     return this.repository.update(id, data);
@@ -175,14 +190,16 @@ export class ProductService {
 
     if (priceInput !== undefined) {
       if (typeof priceInput !== "number" || !Number.isFinite(priceInput) || priceInput <= 0) {
-        throw new ValidationError("El campo 'price' debe ser un numero mayor que 0 para productos 'stock'");
+        throw new ValidationError(
+          "El campo 'price' debe ser un número mayor que 0 para productos 'stock'",
+        );
       }
       price = priceInput;
     }
 
     if (stockInput !== undefined) {
       if (typeof stockInput !== "number" || !Number.isFinite(stockInput) || stockInput < 0) {
-        throw new ValidationError("El campo 'stock' debe ser un numero mayor o igual a 0");
+        throw new ValidationError("El campo 'stock' debe ser un número mayor o igual a 0");
       }
       stock = stockInput;
     }

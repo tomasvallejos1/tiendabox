@@ -44,10 +44,7 @@ export class CategoryRepositoryMongoDB implements ICategoryRepository {
     return docs.map((doc) => this.toEntity(doc));
   }
 
-  async update(
-    id: string,
-    data: Partial<Omit<Category, "id">>,
-  ): Promise<Category | null> {
+  async update(id: string, data: Partial<Omit<Category, "id">>): Promise<Category | null> {
     if (!ObjectId.isValid(id)) {
       return null;
     }

@@ -1,75 +1,84 @@
-import { Brand } from './brand.entity';
-import { BrandRepository } from './brand.repository.interface';
+import { Brand } from "./brand.entity";
+import { IBrandRepository } from "./brand.repository.interface";
+import { ConflictError, ValidationError } from "../errors";
 
+const NAME_MAX_LENGTH = 100;
+
+// Reglas de negocio de Brand. Delega la persistencia en el repositorio.
 export class BrandService {
-  constructor(private repo: BrandRepository) {}
+  constructor(private readonly repository: IBrandRepository) {}
 
-  async createBrand(data: any): Promise<Brand> {
-    // 1. Validar que name exista y no esté vacío
-    if (!data.name || typeof data.name !== 'string' || data.name.trim() === '') {
-      throw new Error('BAD_REQUEST: El nombre de la marca es obligatorio.');
-    }
-    // 2. Validar largo máximo de 100 caracteres
-    if (data.name.length > 100) {
-      throw new Error('BAD_REQUEST: El nombre no puede superar los 100 caracteres.');
-    }
-    // 3. Validar unicidad
-    const existingBrand = await this.repo.getBrandByName(data.name);
-    if (existingBrand) {
-      throw new Error('BAD_REQUEST: Ya existe una marca con ese nombre.');
-    }
-
-    const newBrandData = {
-      name: data.name,
-      logo_url: data.logo_url || null, // Opcional
-    };
-
-    return await this.repo.createBrand(newBrandData);
+  async getAll(): Promise<Brand[]> {
+    return this.repository.getAll();
   }
 
-  async getBrands(): Promise<Brand[]> {
-    return await this.repo.getBrands();
+  async getById(id: string): Promise<Brand | null> {
+    return this.repository.getById(id);
   }
 
-  async getBrandById(id: string): Promise<Brand> {
-    const brand = await this.repo.getBrandById(id);
-    if (!brand) throw new Error('NOT_FOUND: Marca no encontrada.');
-    return brand;
+  async create(input: { name?: unknown; logo_url?: unknown }): Promise<Brand> {
+    const name = this.validateName(input.name);
+    const logo_url = this.normalizeLogoUrl(input.logo_url);
+    await this.ensureNameIsUnique(name);
+    return this.repository.create({ name, logo_url });
   }
 
-  async updateBrand(id: string, data: any): Promise<Brand> {
-    // 1. Validar que el body no esté vacío
-    if (!data || Object.keys(data).length === 0) {
-      throw new Error('BAD_REQUEST: El cuerpo de la petición no puede estar vacío.');
+  async update(id: string, input: { name?: unknown; logo_url?: unknown }): Promise<Brand | null> {
+    const data: Partial<Omit<Brand, "id">> = {};
+
+    if (input.name !== undefined) {
+      data.name = this.validateName(input.name);
+    }
+    if (input.logo_url !== undefined) {
+      data.logo_url = this.normalizeLogoUrl(input.logo_url);
     }
 
-    // 2. Si están modificando el name, aplicamos las mismas reglas
+    if (Object.keys(data).length === 0) {
+      throw new ValidationError("El body no puede estar vacío");
+    }
+
     if (data.name !== undefined) {
-      if (typeof data.name !== 'string' || data.name.trim() === '') {
-        throw new Error('BAD_REQUEST: El nombre no puede estar vacío.');
-      }
-      if (data.name.length > 100) {
-        throw new Error('BAD_REQUEST: El nombre no puede superar los 100 caracteres.');
-      }
-      const existingBrand = await this.repo.getBrandByName(data.name);
-      // Validamos que no colisione con el nombre de OTRA marca distinta
-      if (existingBrand && existingBrand.id !== id) {
-        throw new Error('BAD_REQUEST: Ya existe otra marca con ese nombre.');
-      }
+      await this.ensureNameIsUnique(data.name, id);
     }
 
-    const updateData: Partial<Omit<Brand, 'id'>> = {};
-    if (data.name !== undefined) updateData.name = data.name;
-    if (data.logo_url !== undefined) updateData.logo_url = data.logo_url;
-
-    const updatedBrand = await this.repo.updateBrand(id, updateData);
-    if (!updatedBrand) throw new Error('NOT_FOUND: Marca no encontrada.');
-    
-    return updatedBrand;
+    return this.repository.update(id, data);
   }
 
-  async deleteBrand(id: string): Promise<void> {
-    const deleted = await this.repo.deleteBrand(id);
-    if (!deleted) throw new Error('NOT_FOUND: Marca no encontrada.');
+  async delete(id: string): Promise<boolean> {
+    return this.repository.delete(id);
+  }
+
+  // Rechaza nombres ya usados por otra marca (case-insensitive).
+  // excludeId permite que una marca conserve su propio nombre al actualizar.
+  private async ensureNameIsUnique(name: string, excludeId?: string): Promise<void> {
+    const existing = await this.repository.getByName(name);
+    if (existing && existing.id !== excludeId) {
+      throw new ConflictError(`Ya existe una marca con el nombre '${name}'`);
+    }
+  }
+
+  // name obligatorio, string, no vacio y de maximo 100 caracteres
+  private validateName(value: unknown): string {
+    if (typeof value !== "string" || value.trim().length === 0) {
+      throw new ValidationError("El campo 'name' es obligatorio");
+    }
+    const name = value.trim();
+    if (name.length > NAME_MAX_LENGTH) {
+      throw new ValidationError(
+        `El campo 'name' no puede superar los ${NAME_MAX_LENGTH} caracteres`,
+      );
+    }
+    return name;
+  }
+
+  // logo_url opcional: string o null
+  private normalizeLogoUrl(value: unknown): string | null {
+    if (value === undefined || value === null) {
+      return null;
+    }
+    if (typeof value !== "string") {
+      throw new ValidationError("El campo 'logo_url' debe ser texto");
+    }
+    return value;
   }
 }

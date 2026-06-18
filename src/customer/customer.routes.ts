@@ -1,21 +1,15 @@
-import { Router } from 'express';
-import { Db } from 'mongodb';
-import { CustomerMongoRepository } from './customer.repository.mongodb';
-import { CustomerService } from './customer.service';
-import { CustomerController } from './customer.controller';
+import { Router } from "express";
+import { CustomerController } from "./customer.controller";
 
-export function createCustomerRouter(db: Db): Router {
+// Define los endpoints de Customer y los asocia al controlador.
+export function createCustomerRoutes(controller: CustomerController): Router {
   const router = Router();
-  
-  const repository = new CustomerMongoRepository(db);
-  const service = new CustomerService(repository);
-  const controller = new CustomerController(service);
 
-  router.post('/', controller.createCustomer);
-  router.get('/', controller.getCustomers);
-  router.get('/:id', controller.getCustomerById);
-  router.put('/:id', controller.updateCustomer);
-  router.delete('/:id', controller.deleteCustomer);
+  router.get("/customers", controller.getAll);
+  router.get("/customer/:id", controller.getById);
+  router.post("/customer", controller.create);
+  router.put("/customer/:id", controller.update);
+  router.delete("/customer/:id", controller.delete);
 
   return router;
 }
