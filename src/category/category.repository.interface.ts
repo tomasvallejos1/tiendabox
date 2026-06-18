@@ -4,7 +4,9 @@ import { Category } from "./category.entity";
 export interface ICategoryRepository {
   create(data: Omit<Category, "id">): Promise<Category>;
   getById(id: string): Promise<Category | null>;
+  getByName(name: string): Promise<Category | null>;
   getAll(): Promise<Category[]>;
   update(id: string, data: Partial<Omit<Category, "id">>): Promise<Category | null>;
   delete(id: string): Promise<boolean>;
+  createIndexes(): Promise<void>;
 }

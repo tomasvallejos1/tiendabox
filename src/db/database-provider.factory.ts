@@ -2,6 +2,8 @@ import { Db, MongoClient } from "mongodb";
 import { AppConfig } from "../config";
 import { ICategoryRepository } from "../category/category.repository.interface";
 import { CategoryRepositoryMongoDB } from "../category/category.repository.mongodb";
+import { IProductRepository } from "../product/product.repository.interface";
+import { ProductRepositoryMongoDB } from "../product/product.repository.mongodb";
 
 // Centraliza la creacion de repositorios y las conexiones a las bases.
 // Preparado para sumar PostgreSQL mas adelante.
@@ -22,6 +24,10 @@ export class DatabaseProviderFactory {
 
   createCategoryRepository(): ICategoryRepository {
     return new CategoryRepositoryMongoDB(this.getMongoDb());
+  }
+
+  createProductRepository(): IProductRepository {
+    return new ProductRepositoryMongoDB(this.getMongoDb());
   }
 
   // Cierra las conexiones abiertas.

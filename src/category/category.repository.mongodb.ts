@@ -30,6 +30,15 @@ export class CategoryRepositoryMongoDB implements ICategoryRepository {
     return doc ? this.toEntity(doc) : null;
   }
 
+  // Busqueda por nombre sin distinguir mayusculas/minusculas (collation strength 2).
+  async getByName(name: string): Promise<Category | null> {
+    const doc = await this.collection.findOne(
+      { name },
+      { collation: { locale: "es", strength: 2 } },
+    );
+    return doc ? this.toEntity(doc) : null;
+  }
+
   async getAll(): Promise<Category[]> {
     const docs = await this.collection.find().toArray();
     return docs.map((doc) => this.toEntity(doc));
@@ -56,6 +65,14 @@ export class CategoryRepositoryMongoDB implements ICategoryRepository {
     }
     const result = await this.collection.deleteOne({ _id: new ObjectId(id) });
     return result.deletedCount === 1;
+  }
+
+  // Indice unico case-insensitive sobre name: integridad ante carreras concurrentes.
+  async createIndexes(): Promise<void> {
+    await this.collection.createIndex(
+      { name: 1 },
+      { unique: true, collation: { locale: "es", strength: 2 } },
+    );
   }
 
   // Mapea el documento de Mongo (_id ObjectId) a la entidad (id string).

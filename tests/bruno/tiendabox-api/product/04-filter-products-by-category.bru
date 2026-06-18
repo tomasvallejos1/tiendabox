@@ -1,0 +1,9 @@
+meta {
+  name: Filter Products By Category
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/products?category_id={{categoryId}}
+}

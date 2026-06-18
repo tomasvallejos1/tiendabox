@@ -6,6 +6,9 @@ import { CategoryController } from "./category/category.controller";
 import { createCategoryRoutes } from "./category/category.routes";
 import { createBrandRouter } from './brand/brand.routes';
 import { createCustomerRouter } from './customer/customer.routes';
+import { ProductService } from "./product/product.service";
+import { ProductController } from "./product/product.controller";
+import { createProductRoutes } from "./product/product.routes";
 
 // Composicion principal: crea Express, conecta la base e inyecta dependencias
 // manualmente (repository -> service -> controller -> routes).
@@ -24,16 +27,17 @@ export class App {
     await this.factory.connect();
 
     this.app.use(express.json());
-    this.registerRoutes();
+    await this.registerRoutes();
 
     this.app.listen(this.config.port, () => {
       console.log(`TiendaBox escuchando en http://localhost:${this.config.port}`);
     });
   }
 
-  // Construye la cadena de cada recurso y monta las rutas bajo /api.
-  private registerRoutes(): void {
+  // Construye la cadena de cada recurso, asegura indices y monta las rutas bajo /api.
+  private async registerRoutes(): Promise<void> {
     const categoryRepository = this.factory.createCategoryRepository();
+    await categoryRepository.createIndexes();
     const categoryService = new CategoryService(categoryRepository);
     const categoryController = new CategoryController(categoryService);
     const db = this.factory.getDb();
@@ -42,5 +46,11 @@ export class App {
     // Montamos los routers inyectando la conexión a Mongo (db)
     this.app.use('/api/brand', createBrandRouter(db));
     this.app.use('/api/customer', createCustomerRouter(db));
+
+    const productRepository = this.factory.createProductRepository();
+    const productService = new ProductService(productRepository);
+    const productController = new ProductController(productService);
+
+    this.app.use("/api", createProductRoutes(productController));
   }
 }
