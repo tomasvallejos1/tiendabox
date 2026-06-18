@@ -23,7 +23,14 @@ export class DatabaseProviderFactory {
   }
 
   createCategoryRepository(): ICategoryRepository {
-    return new CategoryRepositoryMongoDB(this.getMongoDb());
+    return new CategoryRepositoryMongoDB(this.getDb());
+  }
+
+  public getDb(): Db {
+    if (!this.mongoDb) {
+      throw new Error("La conexion a MongoDB no fue inicializada. Llama a connect() primero.");
+    }
+    return this.mongoDb;
   }
 
   createProductRepository(): IProductRepository {
@@ -34,11 +41,5 @@ export class DatabaseProviderFactory {
   async close(): Promise<void> {
     await this.mongoClient.close();
   }
-
-  private getMongoDb(): Db {
-    if (!this.mongoDb) {
-      throw new Error("La conexion a MongoDB no fue inicializada. Llama a connect() primero.");
-    }
-    return this.mongoDb;
-  }
 }
+

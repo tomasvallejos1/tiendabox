@@ -9,6 +9,8 @@ import { createCustomerRouter } from './customer/customer.routes';
 import { ProductService } from "./product/product.service";
 import { ProductController } from "./product/product.controller";
 import { createProductRoutes } from "./product/product.routes";
+import { createCustomerRouter } from './customer/customer.routes';
+// ...
 
 // Composicion principal: crea Express, conecta la base e inyecta dependencias
 // manualmente (repository -> service -> controller -> routes).
@@ -52,5 +54,6 @@ export class App {
     const productController = new ProductController(productService);
 
     this.app.use("/api", createProductRoutes(productController));
+    this.app.use('/api/customer', createCustomerRouter(this.factory.getDb()));
   }
 }
