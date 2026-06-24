@@ -1,73 +1,64 @@
-import { Collection, Db, ObjectId, WithId, Document } from "mongodb";
+import { Collection, Db, WithId } from "mongodb";
+import crypto from "crypto";
 import { Brand } from "./brand.entity";
 import { IBrandRepository } from "./brand.repository.interface";
 
-// Implementacion del repositorio que SOLO habla con MongoDB.
-export class BrandMongoRepository implements IBrandRepository {
-  private readonly collection: Collection<Document>;
+export class BrandRepositoryMongoDB implements IBrandRepository {
+  private readonly collection: Collection<{ _id: string; name: string; logo_url?: string | null }>;
 
   constructor(db: Db) {
     this.collection = db.collection("brands");
   }
 
   async create(data: Omit<Brand, "id">): Promise<Brand> {
-    const result = await this.collection.insertOne({
+    const newId = crypto.randomUUID();
+    
+    await this.collection.insertOne({
+      _id: newId,
       name: data.name,
       logo_url: data.logo_url,
     });
+    
     return {
-      id: result.insertedId.toString(),
+      id: newId,
       name: data.name,
       logo_url: data.logo_url,
     };
   }
 
   async getById(id: string): Promise<Brand | null> {
-    if (!ObjectId.isValid(id)) {
-      return null;
-    }
-    const doc = await this.collection.findOne({ _id: new ObjectId(id) });
+    const doc = await this.collection.findOne({ _id: id });
     return doc ? this.toEntity(doc) : null;
   }
 
-  // Busqueda por nombre sin distinguir mayusculas/minusculas (collation strength 2).
   async getByName(name: string): Promise<Brand | null> {
-    const doc = await this.collection.findOne(
-      { name },
-      { collation: { locale: "es", strength: 2 } },
-    );
+    const doc = await this.collection.findOne({ name });
     return doc ? this.toEntity(doc) : null;
   }
 
   async getAll(): Promise<Brand[]> {
     const docs = await this.collection.find().toArray();
-    return docs.map((doc) => this.toEntity(doc));
+    return docs.map((doc) => this.toEntity(doc as WithId<{ _id: string; name: string; logo_url?: string | null }>));
   }
 
   async update(id: string, data: Partial<Omit<Brand, "id">>): Promise<Brand | null> {
-    if (!ObjectId.isValid(id)) {
-      return null;
-    }
-    const doc = await this.collection.findOneAndUpdate(
-      { _id: new ObjectId(id) },
+    const result = await this.collection.findOneAndUpdate(
+      { _id: id },
       { $set: data },
-      { returnDocument: "after" },
+      { returnDocument: "after" }
     );
-    return doc ? this.toEntity(doc) : null;
+    const updated = (result as any)?.value ?? (result as any);
+    return updated ? this.toEntity(updated as WithId<{ _id: string; name: string; logo_url?: string | null }>) : null;
   }
 
   async delete(id: string): Promise<boolean> {
-    if (!ObjectId.isValid(id)) {
-      return false;
-    }
-    const result = await this.collection.deleteOne({ _id: new ObjectId(id) });
+    const result = await this.collection.deleteOne({ _id: id });
     return result.deletedCount === 1;
   }
 
-  // Mapea el documento de Mongo (_id ObjectId) a la entidad (id string).
-  private toEntity(doc: WithId<Document>): Brand {
+  private toEntity(doc: WithId<{ _id: string; name: string; logo_url?: string | null }>): Brand {
     return {
-      id: doc._id.toString(),
+      id: doc._id as string,
       name: doc["name"] as string,
       logo_url: (doc["logo_url"] ?? null) as string | null,
     };
