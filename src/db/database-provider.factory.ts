@@ -5,7 +5,7 @@ import { CategoryRepositoryMongoDB } from "../category/category.repository.mongo
 import { IProductRepository } from "../product/product.repository.interface";
 import { ProductRepositoryMongoDB } from "../product/product.repository.mongodb";
 import { IBrandRepository } from "../brand/brand.repository.interface";
-import { BrandMongoRepository } from "../brand/brand.repository.mongodb";
+import { BrandRepositoryMongoDB } from "../brand/brand.repository.mongodb";
 import { ICustomerRepository } from "../customer/customer.repository.interface";
 import { CustomerMongoRepository } from "../customer/customer.repository.mongodb";
 
@@ -35,7 +35,7 @@ export class DatabaseProviderFactory {
   }
 
   createBrandRepository(): IBrandRepository {
-    return new BrandMongoRepository(this.getDb());
+    return new BrandRepositoryMongoDB(this.getDb());
   }
 
   createCustomerRepository(): ICustomerRepository {
