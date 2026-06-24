@@ -1,16 +1,32 @@
-import { Collection, Db, ObjectId, WithId, Document } from "mongodb";
+import { Collection, Db, WithId } from "mongodb";
+import crypto from "crypto";
 import { Product, ProductType } from "./product.entity";
 import { IProductRepository, ProductFilter } from "./product.repository.interface";
 
+type ProductDocument = {
+  _id: string;
+  name: string;
+  description?: string | null;
+  type: ProductType;
+  price?: number | null;
+  stock: number;
+  category_id: string;
+  brand_id: string;
+  is_active: boolean;
+};
+
 export class ProductRepositoryMongoDB implements IProductRepository {
-  private readonly collection: Collection<Document>;
+  private readonly collection: Collection<ProductDocument>;
 
   constructor(db: Db) {
     this.collection = db.collection("products");
   }
 
   async create(data: Omit<Product, "id">): Promise<Product> {
-    const result = await this.collection.insertOne({
+    const newId = crypto.randomUUID();
+    
+    await this.collection.insertOne({
+      _id: newId,
       name: data.name,
       description: data.description,
       type: data.type,
@@ -20,78 +36,63 @@ export class ProductRepositoryMongoDB implements IProductRepository {
       brand_id: data.brand_id,
       is_active: data.is_active,
     });
+    
     return {
-      id: result.insertedId.toString(),
-      name: data.name,
-      description: data.description,
-      type: data.type,
-      price: data.price,
-      stock: data.stock,
-      category_id: data.category_id,
-      brand_id: data.brand_id,
-      is_active: data.is_active,
+      id: newId,
+      ...data,
     };
   }
 
   async getById(id: string): Promise<Product | null> {
-    if (!ObjectId.isValid(id)) {
-      return null;
-    }
+    // Borrada la validación de ObjectId. Búsqueda directa por string.
     const doc = await this.collection.findOne({
-      _id: new ObjectId(id),
+      _id: id,
       is_active: true,
     });
     return doc ? this.toEntity(doc) : null;
   }
 
-  // getAll arma el query dinamicamente: siempre is_active:true, y suma filtros si vienen.
   async getAll(filter?: ProductFilter): Promise<Product[]> {
-    const query: Document = { is_active: true };
+    const query: Partial<ProductDocument> = { is_active: true };
     if (filter?.category_id) {
-      query["category_id"] = filter.category_id;
+      query.category_id = filter.category_id;
     }
     if (filter?.brand_id) {
-      query["brand_id"] = filter.brand_id;
+      query.brand_id = filter.brand_id;
     }
     const docs = await this.collection.find(query).toArray();
-    return docs.map((doc) => this.toEntity(doc as WithId<Document>));
+    return docs.map((doc) => this.toEntity(doc as WithId<ProductDocument>));
   }
 
   async update(id: string, data: Partial<Omit<Product, "id">>): Promise<Product | null> {
-    if (!ObjectId.isValid(id)) {
-      return null;
-    }
-    const doc = await this.collection.findOneAndUpdate(
-      { _id: new ObjectId(id), is_active: true },
+    const result = await this.collection.findOneAndUpdate(
+      { _id: id, is_active: true },
       { $set: data },
       { returnDocument: "after" },
     );
-    return doc ? this.toEntity(doc as unknown as WithId<Document>) : null;
+    const updated = (result as any)?.value ?? (result as any);
+    return updated ? this.toEntity(updated as WithId<ProductDocument>) : null;
   }
 
-  // Soft delete: marca is_active:false en lugar de borrar.
   async softDelete(id: string): Promise<boolean> {
-    if (!ObjectId.isValid(id)) {
-      return false;
-    }
     const result = await this.collection.updateOne(
-      { _id: new ObjectId(id), is_active: true },
+      { _id: id },
       { $set: { is_active: false } },
     );
     return result.modifiedCount === 1;
   }
 
-  private toEntity(doc: WithId<Document>): Product {
+  private toEntity(doc: WithId<ProductDocument>): Product {
     return {
-      id: doc._id.toString(),
-      name: doc["name"] as string,
+      id: doc._id,
+      name: doc["name"],
       description: (doc["description"] ?? null) as string | null,
-      type: doc["type"] as ProductType,
+      type: doc["type"],
       price: (doc["price"] ?? null) as number | null,
-      stock: (doc["stock"] ?? 0) as number,
-      category_id: doc["category_id"] as string,
-      brand_id: doc["brand_id"] as string,
-      is_active: Boolean(doc["is_active"]),
+      stock: doc["stock"],
+      category_id: doc["category_id"],
+      brand_id: doc["brand_id"],
+      is_active: doc["is_active"],
     };
   }
 }
