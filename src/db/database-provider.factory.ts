@@ -1,4 +1,7 @@
 import { Db, MongoClient } from "mongodb";
+import { Pool } from "pg";
+import fs from "fs";
+import path from "path";
 import { AppConfig } from "../config";
 import { ICategoryRepository } from "../category/category.repository.interface";
 import { CategoryRepositoryMongoDB } from "../category/category.repository.mongodb";
@@ -14,6 +17,7 @@ import { CustomerMongoRepository } from "../customer/customer.repository.mongodb
 export class DatabaseProviderFactory {
   private readonly mongoClient: MongoClient;
   private mongoDb: Db | null = null;
+  private pgPool: Pool | null = null;
 
   constructor(private readonly config: AppConfig) {
     this.mongoClient = new MongoClient(this.config.mongo.uri);
@@ -23,7 +27,18 @@ export class DatabaseProviderFactory {
   async connect(): Promise<void> {
     await this.mongoClient.connect();
     this.mongoDb = this.mongoClient.db(this.config.mongo.db);
-    // A futuro: inicializar el Pool de PostgreSQL aqui.
+
+    this.pgPool = new Pool({
+      host: this.config.postgres.host,
+      port: this.config.postgres.port,
+      user: this.config.postgres.user,
+      password: this.config.postgres.password,
+      database: this.config.postgres.db,
+    });
+
+    const sqlPath = path.join(__dirname, "sql", "init.sql");
+    const sql = fs.readFileSync(sqlPath, "utf-8");
+    await this.pgPool.query(sql);
   }
 
   createCategoryRepository(): ICategoryRepository {
@@ -49,8 +64,18 @@ export class DatabaseProviderFactory {
     return this.mongoDb;
   }
 
+  public getPgPool(): Pool {
+    if (!this.pgPool) {
+      throw new Error("La conexion a PostgreSQL no fue inicializada. Llama a connect() primero.");
+    }
+    return this.pgPool;
+  }
+
   // Cierra las conexiones abiertas.
   async close(): Promise<void> {
     await this.mongoClient.close();
+    if (this.pgPool) {
+      await this.pgPool.end();
+    }
   }
 }
