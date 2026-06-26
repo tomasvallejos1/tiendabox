@@ -1,0 +1,48 @@
+### TiendaBox - Pruebas del recurso User
+### Requiere: docker compose up -d  +  npm run dev
+
+@host = http://localhost:3000
+
+### 1. Crear usuario -> 201 Created (copiar el "id" del body a @userId)
+POST {{host}}/api/user
+Content-Type: application/json
+
+{
+  "email": "nuevo@example.com",
+  "password": "secreto123",
+  "role": "cliente"
+}
+
+### Pegar aca el id devuelto por el POST anterior
+@userId = reemplazar-con-id-real
+
+### 2. Listar todos los usuarios -> 200 OK
+GET {{host}}/api/users
+
+### 3. Obtener usuario por id -> 200 OK
+GET {{host}}/api/user/{{userId}}
+
+### 4. Obtener usuario inexistente -> 404 Not Found
+GET {{host}}/api/user/00000000-0000-0000-0000-000000000000
+
+### 5. Actualizar email del usuario -> 200 OK
+PUT {{host}}/api/user/{{userId}}
+Content-Type: application/json
+
+{
+  "email": "actualizado@example.com"
+}
+
+### 6. Actualizar usuario inexistente -> 404 Not Found
+PUT {{host}}/api/user/00000000-0000-0000-0000-000000000000
+Content-Type: application/json
+
+{
+  "email": "otro@example.com"
+}
+
+### 7. Eliminar usuario -> 204 No Content
+DELETE {{host}}/api/user/{{userId}}
+
+### 8. Eliminar de nuevo el mismo usuario -> 404 Not Found
+DELETE {{host}}/api/user/{{userId}}
