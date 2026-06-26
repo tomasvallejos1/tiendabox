@@ -1,34 +1,31 @@
-import { Collection, Db, ObjectId, WithId, Document } from "mongodb";
+import crypto from "crypto";
+import { Collection, Db } from "mongodb";
 import { Customer } from "./customer.entity";
 import { ICustomerRepository } from "./customer.repository.interface";
 
+type CustomerDoc = { _id: string; name: string; email: string; role: string };
+
 // Implementacion del repositorio que SOLO habla con MongoDB.
 export class CustomerMongoRepository implements ICustomerRepository {
-  private readonly collection: Collection<Document>;
+  private readonly collection: Collection<CustomerDoc>;
 
   constructor(db: Db) {
-    this.collection = db.collection("customers");
+    this.collection = db.collection<CustomerDoc>("customers");
   }
 
   async create(data: Omit<Customer, "id">): Promise<Customer> {
-    const result = await this.collection.insertOne({
+    const newId = crypto.randomUUID();
+    await this.collection.insertOne({
+      _id: newId,
       name: data.name,
       email: data.email,
       role: data.role,
     });
-    return {
-      id: result.insertedId.toString(),
-      name: data.name,
-      email: data.email,
-      role: data.role,
-    };
+    return { id: newId, ...data };
   }
 
   async getById(id: string): Promise<Customer | null> {
-    if (!ObjectId.isValid(id)) {
-      return null;
-    }
-    const doc = await this.collection.findOne({ _id: new ObjectId(id) });
+    const doc = await this.collection.findOne({ _id: id });
     return doc ? this.toEntity(doc) : null;
   }
 
@@ -47,32 +44,22 @@ export class CustomerMongoRepository implements ICustomerRepository {
   }
 
   async update(id: string, data: Partial<Omit<Customer, "id">>): Promise<Customer | null> {
-    if (!ObjectId.isValid(id)) {
-      return null;
-    }
-    const doc = await this.collection.findOneAndUpdate(
-      { _id: new ObjectId(id) },
-      { $set: data },
-      { returnDocument: "after" },
-    );
-    return doc ? this.toEntity(doc) : null;
+    await this.collection.updateOne({ _id: id }, { $set: data });
+    return this.getById(id);
   }
 
   async delete(id: string): Promise<boolean> {
-    if (!ObjectId.isValid(id)) {
-      return false;
-    }
-    const result = await this.collection.deleteOne({ _id: new ObjectId(id) });
+    const result = await this.collection.deleteOne({ _id: id });
     return result.deletedCount === 1;
   }
 
-  // Mapea el documento de Mongo (_id ObjectId) a la entidad (id string).
-  private toEntity(doc: WithId<Document>): Customer {
+  // Mapea el documento de Mongo (_id string) a la entidad (id string).
+  private toEntity(doc: CustomerDoc): Customer {
     return {
-      id: doc._id.toString(),
-      name: doc["name"] as string,
-      email: doc["email"] as string,
-      role: doc["role"] as string,
+      id: doc._id,
+      name: doc.name,
+      email: doc.email,
+      role: doc.role,
     };
   }
 }

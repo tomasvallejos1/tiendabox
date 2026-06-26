@@ -1,32 +1,30 @@
-import { Collection, Db, ObjectId, WithId, Document } from "mongodb";
+import crypto from "crypto";
+import { Collection, Db } from "mongodb";
 import { Brand } from "./brand.entity";
 import { IBrandRepository } from "./brand.repository.interface";
 
+type BrandDoc = { _id: string; name: string; logo_url?: string | null };
+
 // Implementacion del repositorio que SOLO habla con MongoDB.
 export class BrandMongoRepository implements IBrandRepository {
-  private readonly collection: Collection<Document>;
+  private readonly collection: Collection<BrandDoc>;
 
   constructor(db: Db) {
-    this.collection = db.collection("brands");
+    this.collection = db.collection<BrandDoc>("brands");
   }
 
   async create(data: Omit<Brand, "id">): Promise<Brand> {
-    const result = await this.collection.insertOne({
+    const newId = crypto.randomUUID();
+    await this.collection.insertOne({
+      _id: newId,
       name: data.name,
       logo_url: data.logo_url,
     });
-    return {
-      id: result.insertedId.toString(),
-      name: data.name,
-      logo_url: data.logo_url,
-    };
+    return { id: newId, ...data };
   }
 
   async getById(id: string): Promise<Brand | null> {
-    if (!ObjectId.isValid(id)) {
-      return null;
-    }
-    const doc = await this.collection.findOne({ _id: new ObjectId(id) });
+    const doc = await this.collection.findOne({ _id: id });
     return doc ? this.toEntity(doc) : null;
   }
 
@@ -45,31 +43,21 @@ export class BrandMongoRepository implements IBrandRepository {
   }
 
   async update(id: string, data: Partial<Omit<Brand, "id">>): Promise<Brand | null> {
-    if (!ObjectId.isValid(id)) {
-      return null;
-    }
-    const doc = await this.collection.findOneAndUpdate(
-      { _id: new ObjectId(id) },
-      { $set: data },
-      { returnDocument: "after" },
-    );
-    return doc ? this.toEntity(doc) : null;
+    await this.collection.updateOne({ _id: id }, { $set: data });
+    return this.getById(id);
   }
 
   async delete(id: string): Promise<boolean> {
-    if (!ObjectId.isValid(id)) {
-      return false;
-    }
-    const result = await this.collection.deleteOne({ _id: new ObjectId(id) });
+    const result = await this.collection.deleteOne({ _id: id });
     return result.deletedCount === 1;
   }
 
-  // Mapea el documento de Mongo (_id ObjectId) a la entidad (id string).
-  private toEntity(doc: WithId<Document>): Brand {
+  // Mapea el documento de Mongo (_id string) a la entidad (id string).
+  private toEntity(doc: BrandDoc): Brand {
     return {
-      id: doc._id.toString(),
-      name: doc["name"] as string,
-      logo_url: (doc["logo_url"] ?? null) as string | null,
+      id: doc._id,
+      name: doc.name,
+      logo_url: doc.logo_url ?? null,
     };
   }
 }

@@ -1,32 +1,30 @@
-import { Collection, Db, ObjectId, WithId, Document } from "mongodb";
+import crypto from "crypto";
+import { Collection, Db } from "mongodb";
 import { Category } from "./category.entity";
 import { ICategoryRepository } from "./category.repository.interface";
 
+type CategoryDoc = { _id: string; name: string; description?: string | null };
+
 // Implementacion del repositorio que SOLO habla con MongoDB.
 export class CategoryRepositoryMongoDB implements ICategoryRepository {
-  private readonly collection: Collection<Document>;
+  private readonly collection: Collection<CategoryDoc>;
 
   constructor(db: Db) {
-    this.collection = db.collection("categories");
+    this.collection = db.collection<CategoryDoc>("categories");
   }
 
   async create(data: Omit<Category, "id">): Promise<Category> {
-    const result = await this.collection.insertOne({
+    const newId = crypto.randomUUID();
+    await this.collection.insertOne({
+      _id: newId,
       name: data.name,
       description: data.description,
     });
-    return {
-      id: result.insertedId.toString(),
-      name: data.name,
-      description: data.description,
-    };
+    return { id: newId, ...data };
   }
 
   async getById(id: string): Promise<Category | null> {
-    if (!ObjectId.isValid(id)) {
-      return null;
-    }
-    const doc = await this.collection.findOne({ _id: new ObjectId(id) });
+    const doc = await this.collection.findOne({ _id: id });
     return doc ? this.toEntity(doc) : null;
   }
 
@@ -45,22 +43,12 @@ export class CategoryRepositoryMongoDB implements ICategoryRepository {
   }
 
   async update(id: string, data: Partial<Omit<Category, "id">>): Promise<Category | null> {
-    if (!ObjectId.isValid(id)) {
-      return null;
-    }
-    const doc = await this.collection.findOneAndUpdate(
-      { _id: new ObjectId(id) },
-      { $set: data },
-      { returnDocument: "after" },
-    );
-    return doc ? this.toEntity(doc) : null;
+    await this.collection.updateOne({ _id: id }, { $set: data });
+    return this.getById(id);
   }
 
   async delete(id: string): Promise<boolean> {
-    if (!ObjectId.isValid(id)) {
-      return false;
-    }
-    const result = await this.collection.deleteOne({ _id: new ObjectId(id) });
+    const result = await this.collection.deleteOne({ _id: id });
     return result.deletedCount === 1;
   }
 
@@ -72,12 +60,12 @@ export class CategoryRepositoryMongoDB implements ICategoryRepository {
     );
   }
 
-  // Mapea el documento de Mongo (_id ObjectId) a la entidad (id string).
-  private toEntity(doc: WithId<Document>): Category {
+  // Mapea el documento de Mongo (_id string) a la entidad (id string).
+  private toEntity(doc: CategoryDoc): Category {
     return {
-      id: doc._id.toString(),
-      name: doc["name"] as string,
-      description: (doc["description"] ?? null) as string | null,
+      id: doc._id,
+      name: doc.name,
+      description: doc.description ?? null,
     };
   }
 }
