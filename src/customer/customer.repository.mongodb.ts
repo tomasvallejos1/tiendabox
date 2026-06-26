@@ -3,9 +3,8 @@ import { Collection, Db } from "mongodb";
 import { Customer } from "./customer.entity";
 import { ICustomerRepository } from "./customer.repository.interface";
 
-type CustomerDoc = { _id: string; name: string; email: string; role: string };
+type CustomerDoc = { _id: string; name: string; email: string; role: string; user_id?: string };
 
-// Implementacion del repositorio que SOLO habla con MongoDB.
 export class CustomerMongoRepository implements ICustomerRepository {
   private readonly collection: Collection<CustomerDoc>;
 
@@ -20,6 +19,7 @@ export class CustomerMongoRepository implements ICustomerRepository {
       name: data.name,
       email: data.email,
       role: data.role,
+      ...(data.user_id != null && { user_id: data.user_id }),
     });
     return { id: newId, ...data };
   }
@@ -29,7 +29,11 @@ export class CustomerMongoRepository implements ICustomerRepository {
     return doc ? this.toEntity(doc) : null;
   }
 
-  // Busqueda por email sin distinguir mayusculas/minusculas (collation strength 2).
+  async getByUserId(userId: string): Promise<Customer | null> {
+    const doc = await this.collection.findOne({ user_id: userId });
+    return doc ? this.toEntity(doc) : null;
+  }
+
   async getByEmail(email: string): Promise<Customer | null> {
     const doc = await this.collection.findOne(
       { email },
@@ -44,7 +48,10 @@ export class CustomerMongoRepository implements ICustomerRepository {
   }
 
   async update(id: string, data: Partial<Omit<Customer, "id">>): Promise<Customer | null> {
-    await this.collection.updateOne({ _id: id }, { $set: data });
+    const fields = Object.fromEntries(
+      Object.entries(data).filter(([, v]) => v !== undefined),
+    ) as Partial<CustomerDoc>;
+    await this.collection.updateOne({ _id: id }, { $set: fields });
     return this.getById(id);
   }
 
@@ -53,13 +60,13 @@ export class CustomerMongoRepository implements ICustomerRepository {
     return result.deletedCount === 1;
   }
 
-  // Mapea el documento de Mongo (_id string) a la entidad (id string).
   private toEntity(doc: CustomerDoc): Customer {
     return {
       id: doc._id,
       name: doc.name,
       email: doc.email,
       role: doc.role,
+      user_id: doc["user_id"] as string | undefined,
     };
   }
 }
