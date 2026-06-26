@@ -13,6 +13,9 @@ import { createCustomerRoutes } from "./customer/customer.routes";
 import { ProductService } from "./product/product.service";
 import { ProductController } from "./product/product.controller";
 import { createProductRoutes } from "./product/product.routes";
+import { UserService } from "./user/user.service";
+import { UserController } from "./user/user.controller";
+import { createUserRoutes } from "./user/user.routes";
 
 // Composicion principal: crea Express, conecta la base e inyecta dependencias
 // manualmente (repository -> service -> controller -> routes).
@@ -55,6 +58,11 @@ export class App {
     const customerService = new CustomerService(customerRepository);
     const customerController = new CustomerController(customerService);
     this.app.use("/api", createCustomerRoutes(customerController));
+
+    const userRepository = this.factory.createUserRepository();
+    const userService = new UserService(userRepository);
+    const userController = new UserController(userService);
+    this.app.use("/api", createUserRoutes(userController));
 
     const productRepository = this.factory.createProductRepository();
     const productService = new ProductService(
