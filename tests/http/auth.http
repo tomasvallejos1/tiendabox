@@ -1,6 +1,4 @@
 ### TiendaBox - Pruebas del recurso Auth
-### Requiere: docker compose up -d  +  npm run dev
-
 @host = http://localhost:3000
 
 ### 1. Registro exitoso de cliente -> 201 Created
@@ -8,9 +6,9 @@ POST {{host}}/api/auth/register
 Content-Type: application/json
 
 {
-  "name": "Juan Pérez",
-  "email": "juan@example.com",
-  "password": "123456"
+  "name": "Tomas Vallejos",
+  "email": "tomas@gmail.com",
+  "password": "prueba123"
 }
 
 ### 2. Login cliente (debe devolver role: "cliente") -> 200 OK
@@ -18,8 +16,8 @@ POST {{host}}/api/auth/login
 Content-Type: application/json
 
 {
-  "email": "juan@example.com",
-  "password": "123456"
+  "email": "tomas@gmail.com",
+  "password": "prueba123"
 }
 
 ### 3. Login owner (debe devolver role: "owner") -> 200 OK
@@ -36,7 +34,7 @@ POST {{host}}/api/auth/login
 Content-Type: application/json
 
 {
-  "email": "juan@example.com",
+  "email": "tomas@gmail.com",
   "password": "incorrecta"
 }
 
@@ -46,7 +44,7 @@ Content-Type: application/json
 
 {
   "name": "Otro",
-  "email": "juan@example.com",
+  "email": "tomas@gmail.com",
   "password": "123456"
 }
 

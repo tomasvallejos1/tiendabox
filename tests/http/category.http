@@ -1,16 +1,13 @@
 ### TiendaBox - Pruebas del recurso Category
-### Requiere: docker compose up -d  +  npm run dev
-### En VS Code usar la extension "REST Client". Cada bloque se ejecuta con "Send Request".
-
 @host = http://localhost:3000
 
-### 1. Crear categoria -> 201 Created (copiar el "id" del body a @categoryId)
+### 1. Crear categoria -> 201 Created 
 POST {{host}}/api/category
 Content-Type: application/json
 
 {
-  "name": "Celulares",
-  "description": "celuuuusss"
+  "name": "Auriculares",
+  "description": "auriculares y audífonos"
 }
 
 ### Pegar aca el id devuelto por el POST anterior

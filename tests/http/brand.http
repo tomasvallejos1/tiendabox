@@ -1,0 +1,25 @@
+### Crear una Marca
+POST http://localhost:3000/api/brand
+Content-Type: application/json
+
+{
+  "name": "Apple",
+  "logo_url": "https://ejemplo.com/apple-logo.png"
+}
+
+### Listar todas las Marcas
+GET http://localhost:3000/api/brands
+
+### Ver una Marca específica (Reemplazá el ID)
+GET http://localhost:3000/api/brand/6951692b-79a3-41c4-b8e0-2c95e3e8e5ba
+
+### Editar una Marca (Reemplazá el ID)
+PUT http://localhost:3000/api/brand/6951692b-79a3-41c4-b8e0-2c95e3e8e5ba
+Content-Type: application/json
+
+{
+  "name": "Samsung"
+}
+
+### Borrar una Marca (Reemplazá el ID)
+DELETE http://localhost:3000/api/brand/6951692b-79a3-41c4-b8e0-2c95e3e8e5ba

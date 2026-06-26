@@ -1,4 +1,4 @@
-### Crear un Cliente (Recordá que el backend le asigna automáticamente role: "cliente")
+### Crear un Cliente 
 POST http://localhost:3000/api/customer
 Content-Type: application/json
 
@@ -8,13 +8,13 @@ Content-Type: application/json
 }
 
 ### Listar todos los Clientes
-GET http://localhost:3000/api/customer
+GET http://localhost:3000/api/customers
 
 ### Ver un Cliente específico (Reemplazá el ID)
-GET http://localhost:3000/api/customer/64b5f9...
+GET http://localhost:3000/api/customer/e225721b-4657-4e7d-ab9e-a15a85b1c7c8
 
 ### Editar un Cliente (Reemplazá el ID)
-PUT http://localhost:3000/api/customer/64b5f9...
+PUT http://localhost:3000/api/customer/e225721b-4657-4e7d-ab9e-a15a85b1c7c8
 Content-Type: application/json
 
 {

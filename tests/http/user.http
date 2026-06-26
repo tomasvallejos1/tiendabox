@@ -1,6 +1,4 @@
 ### TiendaBox - Pruebas del recurso User
-### Requiere: docker compose up -d  +  npm run dev
-
 @host = http://localhost:3000
 
 ### 1. Crear usuario -> 201 Created (copiar el "id" del body a @userId)
@@ -8,13 +6,13 @@ POST {{host}}/api/user
 Content-Type: application/json
 
 {
-  "email": "nuevo@example.com",
+  "email": "nuevo3534@example.com",
   "password": "secreto123",
   "role": "cliente"
 }
 
 ### Pegar aca el id devuelto por el POST anterior
-@userId = reemplazar-con-id-real
+@userId = 7d75ecd3-8971-41d9-88c9-655a216302c0
 
 ### 2. Listar todos los usuarios -> 200 OK
 GET {{host}}/api/users

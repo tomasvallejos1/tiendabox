@@ -1,21 +1,18 @@
 ### TiendaBox - Pruebas del recurso Product
-### Requiere: docker compose up -d  +  npm run dev
-### En VS Code usar la extension "REST Client". Cada bloque se ejecuta con "Send Request".
-
 @host = http://localhost:3000
 
 ### Variables: reemplazar o crear con ids validos (pueden obtenerse al crear una Category y una Brand de prueba)
-@categoryId = 
-@brandId = 
-@productId = 
+@categoryId = 6a31a2cd2915ac8a7c6afde3
+@brandId = 6951692b-79a3-41c4-b8e0-2c95e3e8e5ba
+@productId = 13a0aee3-3712-42e9-b96c-8fd5fd833f53
 
 ### 1. Crear producto en stock -> 201 Created (copiar el "id" del body a @productId)
 POST {{host}}/api/product
 Content-Type: application/json
 
 {
-  "name": "Auriculares XYZ",
-  "description": "Auriculares con cancelacion",
+  "name": "Macbook Pro 14",
+  "description": "Laptop de Apple con chip M1 Pro",
   "type": "stock",
   "price": 99.99,
   "stock": 10,
@@ -24,14 +21,14 @@ Content-Type: application/json
 }
 
 ### Pegar aca el id devuelto por el POST anterior
-@productId = 
+@productId = 13a0aee3-3712-42e9-b96c-8fd5fd833f53
 
 ### 2. Crear producto por encargo -> 201 Created
 POST {{host}}/api/product
 Content-Type: application/json
 
 {
-  "name": "Orden especial",
+  "name": "Iphone 17 Pro",
   "type": "encargo",
   "category_id": "{{categoryId}}",
   "brand_id": "{{brandId}}"
