@@ -14,3 +14,16 @@ VALUES (
   'owner'
 )
 ON CONFLICT (email) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS carts (
+  id          VARCHAR(36) PRIMARY KEY,
+  customer_id VARCHAR(36) NOT NULL REFERENCES customers(id),
+  updated_at  TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS cart_items (
+  id         VARCHAR(36) PRIMARY KEY,
+  cart_id    VARCHAR(36) NOT NULL REFERENCES carts(id),
+  product_id VARCHAR(36) NOT NULL,
+  quantity   INT NOT NULL CHECK (quantity > 0)
+);

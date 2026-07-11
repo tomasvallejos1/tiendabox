@@ -13,6 +13,8 @@ import { ICustomerRepository } from "../customer/customer.repository.interface";
 import { CustomerMongoRepository } from "../customer/customer.repository.mongodb";
 import { IUserRepository } from "../user/user.repository.interface";
 import { UserRepositoryPostgres } from "../user/user.repository.postgres";
+import { ICartRepository } from "../cart/cart.repository.interface";
+import { CartRepositoryPostgres } from "../cart/cart.repository.postgres";
 
 // Centraliza la creacion de repositorios y las conexiones a las bases.
 // Preparado para sumar PostgreSQL mas adelante.
@@ -61,6 +63,10 @@ export class DatabaseProviderFactory {
 
   createUserRepository(): IUserRepository {
     return new UserRepositoryPostgres(this.getPgPool());
+  }
+
+  createCartRepository(): ICartRepository {
+    return new CartRepositoryPostgres(this.getPgPool());
   }
 
   public getDb(): Db {
