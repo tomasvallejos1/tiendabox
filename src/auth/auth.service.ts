@@ -19,13 +19,6 @@ export class AuthService {
     }
 
     const user = await this.userRepo.create({ email, password, role: "cliente" });
-    // TODO commit 2: actualizar la llamada a customerRepo.create con los nuevos campos.
-    // const customer = await this.customerRepo.create({
-    //   name,
-    //   email,
-    //   role: "cliente",
-    //   user_id: user.id,
-    // });
     const customer = await this.customerRepo.create({
       user_id: user.id,
       name,
