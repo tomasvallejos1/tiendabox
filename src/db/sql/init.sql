@@ -15,6 +15,17 @@ VALUES (
 )
 ON CONFLICT (email) DO NOTHING;
 
+CREATE TABLE IF NOT EXISTS customers (
+  id            VARCHAR(36) PRIMARY KEY,
+  user_id       VARCHAR(36) UNIQUE NOT NULL REFERENCES users(id),
+  name          VARCHAR(150) NOT NULL,
+  government_id VARCHAR(20),
+  tax_status    VARCHAR(30) NOT NULL DEFAULT 'consumidor_final',
+  phone         VARCHAR(30),
+  address       VARCHAR(255),
+  created_at    TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS carts (
   id          VARCHAR(36) PRIMARY KEY,
   customer_id VARCHAR(36) NOT NULL REFERENCES customers(id),
