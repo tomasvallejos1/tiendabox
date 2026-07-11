@@ -3,7 +3,7 @@ import { AuthService } from "./auth.service";
 import { ConflictError, ValidationError } from "../errors";
 
 export class AuthController {
-  constructor(private readonly service: AuthService) { }
+  constructor(private readonly service: AuthService) {}
 
   register = async (req: Request, res: Response): Promise<void> => {
     try {
