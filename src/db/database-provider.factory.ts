@@ -15,6 +15,8 @@ import { IUserRepository } from "../user/user.repository.interface";
 import { UserRepositoryPostgres } from "../user/user.repository.postgres";
 import { ICartRepository } from "../cart/cart.repository.interface";
 import { CartRepositoryPostgres } from "../cart/cart.repository.postgres";
+import { IOrderRepository } from "../order/order.repository.interface";
+import { OrderRepositoryPostgres } from "../order/order.repository.postgres";
 
 // Centraliza la creacion de repositorios y las conexiones a las bases.
 // Preparado para sumar PostgreSQL mas adelante.
@@ -67,6 +69,10 @@ export class DatabaseProviderFactory {
 
   createCartRepository(): ICartRepository {
     return new CartRepositoryPostgres(this.getPgPool());
+  }
+
+  createOrderRepository(): IOrderRepository {
+    return new OrderRepositoryPostgres(this.getPgPool());
   }
 
   public getDb(): Db {
