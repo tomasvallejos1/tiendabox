@@ -6,7 +6,7 @@ export class AuthService {
   constructor(
     private readonly userRepo: IUserRepository,
     private readonly customerRepo: ICustomerRepository,
-  ) { }
+  ) {}
 
   async register(input: { name?: unknown; email?: unknown; password?: unknown }) {
     const name = this.validateName(input.name);
@@ -20,10 +20,12 @@ export class AuthService {
 
     const user = await this.userRepo.create({ email, password, role: "cliente" });
     const customer = await this.customerRepo.create({
-      name,
-      email,
-      role: "cliente",
       user_id: user.id,
+      name,
+      government_id: null,
+      tax_status: "consumidor_final",
+      phone: null,
+      address: null,
     });
 
     return {

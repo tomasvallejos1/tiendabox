@@ -10,7 +10,7 @@ import { ProductRepositoryMongoDB } from "../product/product.repository.mongodb"
 import { IBrandRepository } from "../brand/brand.repository.interface";
 import { BrandMongoRepository } from "../brand/brand.repository.mongodb";
 import { ICustomerRepository } from "../customer/customer.repository.interface";
-import { CustomerMongoRepository } from "../customer/customer.repository.mongodb";
+import { CustomerRepositoryPostgres } from "../customer/customer.repository.postgres";
 import { IUserRepository } from "../user/user.repository.interface";
 import { UserRepositoryPostgres } from "../user/user.repository.postgres";
 
@@ -56,7 +56,7 @@ export class DatabaseProviderFactory {
   }
 
   createCustomerRepository(): ICustomerRepository {
-    return new CustomerMongoRepository(this.getDb());
+    return new CustomerRepositoryPostgres(this.getPgPool());
   }
 
   createUserRepository(): IUserRepository {
