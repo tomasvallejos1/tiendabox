@@ -25,3 +25,10 @@ CREATE TABLE IF NOT EXISTS customers (
   address       VARCHAR(255),
   created_at    TIMESTAMP NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS sessions (
+  token      VARCHAR(36) PRIMARY KEY,
+  user_id    VARCHAR(36) NOT NULL REFERENCES users(id),
+  expires_at TIMESTAMP NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
