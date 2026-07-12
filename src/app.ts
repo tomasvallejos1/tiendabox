@@ -19,6 +19,8 @@ import { createUserRoutes } from "./user/user.routes";
 import { AuthService } from "./auth/auth.service";
 import { AuthController } from "./auth/auth.controller";
 import { createAuthRoutes } from "./auth/auth.routes";
+import { authenticate } from "./middlewares/authenticate";
+import { authorize } from "./middlewares/authorize";
 
 // Composicion principal: crea Express, conecta la base e inyecta dependencias
 // manualmente (repository -> service -> controller -> routes).
@@ -46,28 +48,32 @@ export class App {
 
   // Construye la cadena de cada recurso, asegura indices y monta las rutas bajo /api.
   private async registerRoutes(): Promise<void> {
+    const userRepository = this.factory.createUserRepository();
+    const sessionRepository = this.factory.createSessionRepository();
+    const auth = authenticate(sessionRepository, userRepository);
+    const ownerOnly = authorize("owner");
+    const catalogGuards = { auth, ownerOnly };
+
     const categoryRepository = this.factory.createCategoryRepository();
     await categoryRepository.createIndexes();
     const categoryService = new CategoryService(categoryRepository);
     const categoryController = new CategoryController(categoryService);
-    this.app.use("/api", createCategoryRoutes(categoryController));
+    this.app.use("/api", createCategoryRoutes(categoryController, catalogGuards));
 
     const brandRepository = this.factory.createBrandRepository();
     const brandService = new BrandService(brandRepository);
     const brandController = new BrandController(brandService);
-    this.app.use("/api", createBrandRoutes(brandController));
+    this.app.use("/api", createBrandRoutes(brandController, catalogGuards));
 
     const customerRepository = this.factory.createCustomerRepository();
     const customerService = new CustomerService(customerRepository);
     const customerController = new CustomerController(customerService);
     this.app.use("/api", createCustomerRoutes(customerController));
 
-    const userRepository = this.factory.createUserRepository();
     const userService = new UserService(userRepository);
     const userController = new UserController(userService);
     this.app.use("/api", createUserRoutes(userController));
 
-    const sessionRepository = this.factory.createSessionRepository();
     const authService = new AuthService(userRepository, customerRepository, sessionRepository);
     const authController = new AuthController(authService);
     this.app.use("/api", createAuthRoutes(authController));
@@ -79,6 +85,6 @@ export class App {
       brandRepository,
     );
     const productController = new ProductController(productService);
-    this.app.use("/api", createProductRoutes(productController));
+    this.app.use("/api", createProductRoutes(productController, catalogGuards));
   }
 }
