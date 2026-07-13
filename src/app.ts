@@ -19,6 +19,14 @@ import { createUserRoutes } from "./user/user.routes";
 import { AuthService } from "./auth/auth.service";
 import { AuthController } from "./auth/auth.controller";
 import { createAuthRoutes } from "./auth/auth.routes";
+import { authenticate } from "./middlewares/authenticate";
+import { authorize } from "./middlewares/authorize";
+import { CartService } from "./cart/cart.service";
+import { CartController } from "./cart/cart.controller";
+import { createCartRoutes } from "./cart/cart.routes";
+import { OrderService } from "./order/order.service";
+import { OrderController } from "./order/order.controller";
+import { createOrderRoutes } from "./order/order.routes";
 
 // Composicion principal: crea Express, conecta la base e inyecta dependencias
 // manualmente (repository -> service -> controller -> routes).
@@ -46,28 +54,34 @@ export class App {
 
   // Construye la cadena de cada recurso, asegura indices y monta las rutas bajo /api.
   private async registerRoutes(): Promise<void> {
+    const userRepository = this.factory.createUserRepository();
+    const sessionRepository = this.factory.createSessionRepository();
+    const auth = authenticate(sessionRepository, userRepository);
+    const ownerOnly = authorize("owner");
+    const clienteOnly = authorize("cliente");
+    const catalogGuards = { auth, ownerOnly };
+
     const categoryRepository = this.factory.createCategoryRepository();
     await categoryRepository.createIndexes();
     const categoryService = new CategoryService(categoryRepository);
     const categoryController = new CategoryController(categoryService);
-    this.app.use("/api", createCategoryRoutes(categoryController));
+    this.app.use("/api", createCategoryRoutes(categoryController, catalogGuards));
 
     const brandRepository = this.factory.createBrandRepository();
     const brandService = new BrandService(brandRepository);
     const brandController = new BrandController(brandService);
-    this.app.use("/api", createBrandRoutes(brandController));
+    this.app.use("/api", createBrandRoutes(brandController, catalogGuards));
 
     const customerRepository = this.factory.createCustomerRepository();
     const customerService = new CustomerService(customerRepository);
     const customerController = new CustomerController(customerService);
-    this.app.use("/api", createCustomerRoutes(customerController));
+    this.app.use("/api", createCustomerRoutes(customerController, catalogGuards));
 
-    const userRepository = this.factory.createUserRepository();
     const userService = new UserService(userRepository);
     const userController = new UserController(userService);
     this.app.use("/api", createUserRoutes(userController));
 
-    const authService = new AuthService(userRepository, customerRepository);
+    const authService = new AuthService(userRepository, customerRepository, sessionRepository);
     const authController = new AuthController(authService);
     this.app.use("/api", createAuthRoutes(authController));
 
@@ -78,6 +92,21 @@ export class App {
       brandRepository,
     );
     const productController = new ProductController(productService);
-    this.app.use("/api", createProductRoutes(productController));
+    this.app.use("/api", createProductRoutes(productController, catalogGuards));
+
+    const cartRepository = this.factory.createCartRepository();
+    const cartService = new CartService(cartRepository, productRepository, customerRepository);
+    const cartController = new CartController(cartService);
+    this.app.use("/api", createCartRoutes(cartController, { auth, clienteOnly }));
+
+    const orderRepository = this.factory.createOrderRepository();
+    const orderService = new OrderService(
+      orderRepository,
+      productRepository,
+      cartRepository,
+      customerRepository,
+    );
+    const orderController = new OrderController(orderService);
+    this.app.use("/api", createOrderRoutes(orderController, { auth, ownerOnly, clienteOnly }));
   }
 }
