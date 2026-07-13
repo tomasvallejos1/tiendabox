@@ -13,6 +13,8 @@ import { ICustomerRepository } from "../customer/customer.repository.interface";
 import { CustomerRepositoryPostgres } from "../customer/customer.repository.postgres";
 import { IUserRepository } from "../user/user.repository.interface";
 import { UserRepositoryPostgres } from "../user/user.repository.postgres";
+import { ISessionRepository } from "../session/session.repository.interface";
+import { SessionRepositoryPostgres } from "../session/session.repository.postgres";
 import { ICartRepository } from "../cart/cart.repository.interface";
 import { CartRepositoryPostgres } from "../cart/cart.repository.postgres";
 import { IOrderRepository } from "../order/order.repository.interface";
@@ -65,6 +67,10 @@ export class DatabaseProviderFactory {
 
   createUserRepository(): IUserRepository {
     return new UserRepositoryPostgres(this.getPgPool());
+  }
+
+  createSessionRepository(): ISessionRepository {
+    return new SessionRepositoryPostgres(this.getPgPool());
   }
 
   createCartRepository(): ICartRepository {

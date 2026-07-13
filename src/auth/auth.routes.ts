@@ -7,6 +7,7 @@ export function createAuthRoutes(controller: AuthController): Router {
 
   router.post("/auth/register", controller.register);
   router.post("/auth/login", controller.login);
+  router.post("/auth/logout", controller.logout);
 
   return router;
 }

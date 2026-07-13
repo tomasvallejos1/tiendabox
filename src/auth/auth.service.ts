@@ -1,11 +1,13 @@
 import { IUserRepository } from "../user/user.repository.interface";
 import { ICustomerRepository } from "../customer/customer.repository.interface";
+import { ISessionRepository } from "../session/session.repository.interface";
 import { ConflictError, ValidationError } from "../errors";
 
 export class AuthService {
   constructor(
     private readonly userRepo: IUserRepository,
     private readonly customerRepo: ICustomerRepository,
+    private readonly sessionRepo: ISessionRepository,
   ) {}
 
   async register(input: { name?: unknown; email?: unknown; password?: unknown }) {
@@ -45,12 +47,19 @@ export class AuthService {
 
     const customer = await this.customerRepo.getByUserId(user.id);
 
+    const session = await this.sessionRepo.create(user.id);
+
     return {
       id: user.id,
       email: user.email,
       role: user.role,
       customer_id: customer?.id ?? null,
+      token: session.token,
     };
+  }
+
+  async logout(token: string): Promise<void> {
+    await this.sessionRepo.deleteByToken(token);
   }
 
   private validateName(value: unknown): string {
