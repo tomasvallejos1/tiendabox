@@ -8,14 +8,8 @@ export class CartController {
 
   getCart = async (req: Request, res: Response): Promise<void> => {
     try {
-      // TODO: reemplazar por req.user en commit 8
-      const customerId = req.body.customer_id as string;
-      if (!customerId) {
-        res.status(400).json({ error: "customer_id es obligatorio" });
-        return;
-      }
-
-      const cart = await this.service.getCart(customerId);
+      const userId = req.user!.id;
+      const cart = await this.service.getCart(userId);
       res.status(200).json(cart);
     } catch (error) {
       this.handleError(res, error);
@@ -24,15 +18,9 @@ export class CartController {
 
   addItem = async (req: Request, res: Response): Promise<void> => {
     try {
-      // TODO: reemplazar por req.user en commit 8
-      const customerId = req.body.customer_id as string;
-      if (!customerId) {
-        res.status(400).json({ error: "customer_id es obligatorio" });
-        return;
-      }
-
+      const userId = req.user!.id;
       const { product_id, quantity } = req.body;
-      const cart = await this.service.addItem(customerId, product_id, quantity);
+      const cart = await this.service.addItem(userId, product_id, quantity);
       res.status(200).json(cart);
     } catch (error) {
       this.handleError(res, error);
@@ -41,15 +29,9 @@ export class CartController {
 
   removeItem = async (req: Request, res: Response): Promise<void> => {
     try {
-      // TODO: reemplazar por req.user en commit 8
-      const customerId = req.body.customer_id as string;
-      if (!customerId) {
-        res.status(400).json({ error: "customer_id es obligatorio" });
-        return;
-      }
-
+      const userId = req.user!.id;
       const productId = req.params["productId"] as string;
-      const cart = await this.service.removeItem(customerId, productId);
+      const cart = await this.service.removeItem(userId, productId);
       res.status(200).json(cart);
     } catch (error) {
       this.handleError(res, error);
@@ -58,14 +40,8 @@ export class CartController {
 
   clear = async (req: Request, res: Response): Promise<void> => {
     try {
-      // TODO: reemplazar por req.user en commit 8
-      const customerId = req.body.customer_id as string;
-      if (!customerId) {
-        res.status(400).json({ error: "customer_id es obligatorio" });
-        return;
-      }
-
-      await this.service.clear(customerId);
+      const userId = req.user!.id;
+      await this.service.clear(userId);
       res.status(204).send();
     } catch (error) {
       this.handleError(res, error);
