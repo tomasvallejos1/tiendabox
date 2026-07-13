@@ -1,6 +1,7 @@
 import { Cart } from "./cart.entity";
 import { ICartRepository } from "./cart.repository.interface";
 import { IProductRepository } from "../product/product.repository.interface";
+import { ICustomerRepository } from "../customer/customer.repository.interface";
 import { ValidationError } from "../errors";
 
 // Logica de negocio del carrito. Valida productos y stock antes de operar.
@@ -8,10 +9,21 @@ export class CartService {
   constructor(
     private readonly cartRepository: ICartRepository,
     private readonly productRepository: IProductRepository,
+    private readonly customerRepository: ICustomerRepository,
   ) {}
 
+  // Resuelve el customerId a partir del userId del token.
+  private async resolveCustomerId(userId: string): Promise<string> {
+    const customer = await this.customerRepository.getByUserId(userId);
+    if (!customer) {
+      throw new ValidationError("No existe un perfil de cliente para este usuario");
+    }
+    return customer.id;
+  }
+
   // Devuelve el carrito del cliente; si no existe, lo crea vacio.
-  async getCart(customerId: string): Promise<Cart> {
+  async getCart(userId: string): Promise<Cart> {
+    const customerId = await this.resolveCustomerId(userId);
     const cart = await this.cartRepository.getByCustomerId(customerId);
     if (cart) {
       return cart;
@@ -19,7 +31,9 @@ export class CartService {
     return this.cartRepository.createForCustomer(customerId);
   }
 
-  async addItem(customerId: string, productId: string, quantity: number): Promise<Cart> {
+  async addItem(userId: string, productId: string, quantity: number): Promise<Cart> {
+    const customerId = await this.resolveCustomerId(userId);
+
     if (!Number.isInteger(quantity) || quantity <= 0) {
       throw new ValidationError("La cantidad debe ser un entero mayor a 0");
     }
@@ -36,7 +50,7 @@ export class CartService {
       );
     }
 
-    const cart = await this.getCart(customerId);
+    const cart = await this.getCartByCustomerId(customerId);
     const existingItem = cart.items.find((item) => item.product_id === productId);
 
     if (existingItem) {
@@ -57,7 +71,8 @@ export class CartService {
     return (await this.cartRepository.getByCustomerId(customerId))!;
   }
 
-  async removeItem(customerId: string, productId: string): Promise<Cart> {
+  async removeItem(userId: string, productId: string): Promise<Cart> {
+    const customerId = await this.resolveCustomerId(userId);
     const cart = await this.cartRepository.getByCustomerId(customerId);
     if (!cart) {
       throw new ValidationError("El cliente no tiene un carrito activo");
@@ -67,11 +82,21 @@ export class CartService {
     return (await this.cartRepository.getByCustomerId(customerId))!;
   }
 
-  async clear(customerId: string): Promise<void> {
+  async clear(userId: string): Promise<void> {
+    const customerId = await this.resolveCustomerId(userId);
     const cart = await this.cartRepository.getByCustomerId(customerId);
     if (!cart) {
       return;
     }
     await this.cartRepository.clear(cart.id);
+  }
+
+  // Método interno: obtiene el carrito por customerId (ya resuelto).
+  private async getCartByCustomerId(customerId: string): Promise<Cart> {
+    const cart = await this.cartRepository.getByCustomerId(customerId);
+    if (cart) {
+      return cart;
+    }
+    return this.cartRepository.createForCustomer(customerId);
   }
 }

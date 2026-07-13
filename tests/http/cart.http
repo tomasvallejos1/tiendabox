@@ -1,0 +1,62 @@
+### TiendaBox - Pruebas del recurso Cart
+### Todas las rutas requieren auth + rol "cliente".
+### Antes de ejecutar, hacer login como cliente y pegar el token.
+@host = http://localhost:3000
+@token = <token_cliente>
+
+### 1. Agregar item al carrito -> 200 OK
+POST {{host}}/api/cart/items
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "product_id": "<product_id>",
+  "quantity": 2
+}
+
+### 2. Ver carrito -> 200 OK
+GET {{host}}/api/cart
+Authorization: Bearer {{token}}
+
+### 3. Agregar otro item -> 200 OK
+POST {{host}}/api/cart/items
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "product_id": "<product_id_2>",
+  "quantity": 1
+}
+
+### 4. Quitar item del carrito -> 200 OK
+DELETE {{host}}/api/cart/items/<product_id>
+Authorization: Bearer {{token}}
+
+### 5. Vaciar carrito -> 204 No Content
+DELETE {{host}}/api/cart
+Authorization: Bearer {{token}}
+
+### --- Casos de error ---
+
+### 6. Acceder sin token -> 401 No autenticado
+GET {{host}}/api/cart
+
+### 7. Agregar producto inexistente -> 400 Producto no disponible
+POST {{host}}/api/cart/items
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "product_id": "00000000-0000-0000-0000-000000000000",
+  "quantity": 1
+}
+
+### 8. Agregar con cantidad inválida -> 400
+POST {{host}}/api/cart/items
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "product_id": "<product_id>",
+  "quantity": 0
+}

@@ -8,14 +8,8 @@ export class OrderController {
 
   create = async (req: Request, res: Response): Promise<void> => {
     try {
-      // TODO: reemplazar por req.user en commit 8
-      const customerId = req.body.customer_id as string;
-      if (!customerId) {
-        res.status(400).json({ error: "customer_id es obligatorio" });
-        return;
-      }
-
-      const order = await this.service.createOrder(customerId, req.body);
+      const userId = req.user!.id;
+      const order = await this.service.createOrder(userId, req.body);
       res.status(201).json(order);
     } catch (error) {
       this.handleError(res, error);
@@ -24,14 +18,8 @@ export class OrderController {
 
   getMyOrders = async (req: Request, res: Response): Promise<void> => {
     try {
-      // TODO: reemplazar por req.user en commit 8
-      const customerId = req.body.customer_id as string;
-      if (!customerId) {
-        res.status(400).json({ error: "customer_id es obligatorio" });
-        return;
-      }
-
-      const orders = await this.service.getMyOrders(customerId);
+      const userId = req.user!.id;
+      const orders = await this.service.getMyOrders(userId);
       res.status(200).json(orders);
     } catch (error) {
       this.handleError(res, error);
@@ -80,14 +68,9 @@ export class OrderController {
   cancel = async (req: Request, res: Response): Promise<void> => {
     try {
       const id = req.params["id"] as string;
-      // TODO: reemplazar por req.user en commit 8
-      const customerId = req.body.customer_id as string;
-      if (!customerId) {
-        res.status(400).json({ error: "customer_id es obligatorio" });
-        return;
-      }
+      const userId = req.user!.id;
 
-      const order = await this.service.cancelOrder(id, customerId);
+      const order = await this.service.cancelOrder(id, userId);
       if (!order) {
         res.status(404).json({ error: "Pedido no encontrado" });
         return;

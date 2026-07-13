@@ -1,0 +1,116 @@
+### TiendaBox - Pruebas del recurso Order
+### Antes de ejecutar, hacer login y pegar los tokens correspondientes.
+@host = http://localhost:3000
+@tokenCliente = <token_cliente>
+@tokenOwner = <token_owner>
+
+### --- Crear pedidos (cliente) ---
+
+### 1. Crear pedido con retiro -> 201 Created
+POST {{host}}/api/order
+Content-Type: application/json
+Authorization: Bearer {{tokenCliente}}
+
+{
+  "delivery_type": "retiro",
+  "items": [
+    { "product_id": "<product_id>", "quantity": 1 }
+  ]
+}
+
+### 2. Crear pedido con envio -> 201 Created
+POST {{host}}/api/order
+Content-Type: application/json
+Authorization: Bearer {{tokenCliente}}
+
+{
+  "delivery_type": "envio",
+  "delivery_address": "Av. Corrientes 1234, CABA",
+  "items": [
+    { "product_id": "<product_id>", "quantity": 1 }
+  ]
+}
+
+### 3. Crear pedido envio sin direccion -> 400 Bad Request
+POST {{host}}/api/order
+Content-Type: application/json
+Authorization: Bearer {{tokenCliente}}
+
+{
+  "delivery_type": "envio",
+  "items": [
+    { "product_id": "<product_id>", "quantity": 1 }
+  ]
+}
+
+### --- Consultar pedidos ---
+
+### 4. Ver mis pedidos (cliente) -> 200 OK
+GET {{host}}/api/orders/mine
+Authorization: Bearer {{tokenCliente}}
+
+### 5. Ver todos los pedidos (owner) -> 200 OK
+GET {{host}}/api/orders
+Authorization: Bearer {{tokenOwner}}
+
+### 6. Ver pedido por id (cualquier logueado) -> 200 OK
+GET {{host}}/api/order/<order_id>
+Authorization: Bearer {{tokenCliente}}
+
+### --- Cambiar estado (owner) ---
+
+### 7. Avanzar a confirmado -> 200 OK
+PUT {{host}}/api/order/<order_id>/status
+Content-Type: application/json
+Authorization: Bearer {{tokenOwner}}
+
+{
+  "status": "confirmado"
+}
+
+### 8. Avanzar a en_preparacion -> 200 OK
+PUT {{host}}/api/order/<order_id>/status
+Content-Type: application/json
+Authorization: Bearer {{tokenOwner}}
+
+{
+  "status": "en_preparacion"
+}
+
+### 9. Cambiar estado saltando uno -> 400 ("Transición de estado no permitida")
+PUT {{host}}/api/order/<order_id>/status
+Content-Type: application/json
+Authorization: Bearer {{tokenOwner}}
+
+{
+  "status": "entregado"
+}
+
+### --- Cancelar (cliente) ---
+
+### 10. Cancelar pedido pendiente -> 200 OK
+# Crear un pedido nuevo antes de probar esto.
+PUT {{host}}/api/order/<order_id_pendiente>/cancel
+Authorization: Bearer {{tokenCliente}}
+
+### 11. Cancelar pedido no pendiente -> 400 ("Solo se puede cancelar un pedido pendiente")
+PUT {{host}}/api/order/<order_id_confirmado>/cancel
+Authorization: Bearer {{tokenCliente}}
+
+### --- Errores de autenticacion/autorizacion ---
+
+### 12. Acceder sin token -> 401 No autenticado
+GET {{host}}/api/orders/mine
+
+### 13. Cliente intenta GET /orders (todos) -> 403 No autorizado
+GET {{host}}/api/orders
+Authorization: Bearer {{tokenCliente}}
+
+### 14. Cliente intenta cambiar estado -> 403 No autorizado
+PUT {{host}}/api/order/<order_id>/status
+Content-Type: application/json
+Authorization: Bearer {{tokenCliente}}
+
+{
+  "status": "confirmado"
+}

@@ -12,6 +12,7 @@ Content-Type: application/json
 }
 
 ### 2. Login cliente (debe devolver role: "cliente") -> 200 OK
+# Guardar el token del response para usar en las pruebas autenticadas.
 POST {{host}}/api/auth/login
 Content-Type: application/json
 
@@ -21,6 +22,7 @@ Content-Type: application/json
 }
 
 ### 3. Login owner (debe devolver role: "owner") -> 200 OK
+# Guardar el token del response para usar en las pruebas de owner.
 POST {{host}}/api/auth/login
 Content-Type: application/json
 
@@ -56,3 +58,8 @@ Content-Type: application/json
   "name": "Sin pass",
   "email": "sinpass@example.com"
 }
+
+### 7. Logout -> 200 OK
+# Pegar el token obtenido en el login.
+POST {{host}}/api/auth/logout
+Authorization: Bearer <token_cliente>

@@ -2,6 +2,7 @@ import { Order, OrderStatus } from "./order.entity";
 import { IOrderRepository } from "./order.repository.interface";
 import { IProductRepository } from "../product/product.repository.interface";
 import { ICartRepository } from "../cart/cart.repository.interface";
+import { ICustomerRepository } from "../customer/customer.repository.interface";
 import { ValidationError } from "../errors";
 
 // Logica de negocio de pedidos. Valida productos, stock, y delivery.
@@ -20,16 +21,28 @@ export class OrderService {
     private readonly orderRepository: IOrderRepository,
     private readonly productRepository: IProductRepository,
     private readonly cartRepository: ICartRepository,
+    private readonly customerRepository: ICustomerRepository,
   ) {}
 
+  // Resuelve el customerId a partir del userId del token.
+  private async resolveCustomerId(userId: string): Promise<string> {
+    const customer = await this.customerRepository.getByUserId(userId);
+    if (!customer) {
+      throw new ValidationError("No existe un perfil de cliente para este usuario");
+    }
+    return customer.id;
+  }
+
   async createOrder(
-    customerId: string,
+    userId: string,
     input: {
       delivery_type?: unknown;
       delivery_address?: unknown;
       items?: { product_id: string; quantity: number }[];
     },
   ): Promise<Order> {
+    const customerId = await this.resolveCustomerId(userId);
+
     // 1. Validar delivery_type.
     const deliveryType = this.validateDeliveryType(input.delivery_type);
     let deliveryAddress: string | null = null;
@@ -146,7 +159,8 @@ export class OrderService {
     return order;
   }
 
-  async getMyOrders(customerId: string): Promise<Order[]> {
+  async getMyOrders(userId: string): Promise<Order[]> {
+    const customerId = await this.resolveCustomerId(userId);
     return this.orderRepository.getByCustomerId(customerId);
   }
 
@@ -184,7 +198,8 @@ export class OrderService {
   }
 
   // Cancela la orden si pertenece al cliente y está pendiente.
-  async cancelOrder(orderId: string, customerId: string): Promise<Order | null> {
+  async cancelOrder(orderId: string, userId: string): Promise<Order | null> {
+    const customerId = await this.resolveCustomerId(userId);
     const order = await this.orderRepository.getById(orderId);
     if (!order) return null;
 

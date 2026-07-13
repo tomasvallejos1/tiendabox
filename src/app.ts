@@ -58,6 +58,7 @@ export class App {
     const sessionRepository = this.factory.createSessionRepository();
     const auth = authenticate(sessionRepository, userRepository);
     const ownerOnly = authorize("owner");
+    const clienteOnly = authorize("cliente");
     const catalogGuards = { auth, ownerOnly };
 
     const categoryRepository = this.factory.createCategoryRepository();
@@ -74,7 +75,7 @@ export class App {
     const customerRepository = this.factory.createCustomerRepository();
     const customerService = new CustomerService(customerRepository);
     const customerController = new CustomerController(customerService);
-    this.app.use("/api", createCustomerRoutes(customerController));
+    this.app.use("/api", createCustomerRoutes(customerController, catalogGuards));
 
     const userService = new UserService(userRepository);
     const userController = new UserController(userService);
@@ -94,13 +95,18 @@ export class App {
     this.app.use("/api", createProductRoutes(productController, catalogGuards));
 
     const cartRepository = this.factory.createCartRepository();
-    const cartService = new CartService(cartRepository, productRepository);
+    const cartService = new CartService(cartRepository, productRepository, customerRepository);
     const cartController = new CartController(cartService);
-    this.app.use("/api", createCartRoutes(cartController));
+    this.app.use("/api", createCartRoutes(cartController, { auth, clienteOnly }));
 
     const orderRepository = this.factory.createOrderRepository();
-    const orderService = new OrderService(orderRepository, productRepository, cartRepository);
+    const orderService = new OrderService(
+      orderRepository,
+      productRepository,
+      cartRepository,
+      customerRepository,
+    );
     const orderController = new OrderController(orderService);
-    this.app.use("/api", createOrderRoutes(orderController));
+    this.app.use("/api", createOrderRoutes(orderController, { auth, ownerOnly, clienteOnly }));
   }
 }
