@@ -1,8 +1,11 @@
-import { Order } from "./order.entity";
+import { Order, OrderStatus } from "./order.entity";
 import { IOrderRepository } from "./order.repository.interface";
 import { IProductRepository } from "../product/product.repository.interface";
 import { ICartRepository } from "../cart/cart.repository.interface";
 import { ValidationError } from "../errors";
+
+// Orden lineal de estados permitidos (sin "cancelado", que es una rama aparte).
+const FLUJO: OrderStatus[] = ["pendiente", "confirmado", "en_preparacion", "listo_para_retirar", "entregado"];
 
 // Logica de negocio de pedidos. Valida productos, stock, y delivery.
 export class OrderService {
@@ -146,6 +149,52 @@ export class OrderService {
 
   async getById(id: string): Promise<Order | null> {
     return this.orderRepository.getById(id);
+  }
+
+  // Avanza el estado de la orden un paso en el flujo lineal.
+  async changeStatus(orderId: string, newStatus: string): Promise<Order | null> {
+    const order = await this.orderRepository.getById(orderId);
+    if (!order) return null;
+
+    // No se puede cambiar el estado de una orden cancelada.
+    if (order.status === "cancelado") {
+      throw new ValidationError("No se puede cambiar el estado de una orden cancelada");
+    }
+
+    // Validar que newStatus sea un estado válido del flujo.
+    const newIndex = FLUJO.indexOf(newStatus as OrderStatus);
+    if (newIndex === -1) {
+      throw new ValidationError("Estado no válido");
+    }
+
+    const currentIndex = FLUJO.indexOf(order.status);
+
+    // Solo permitir avanzar exactamente un paso.
+    if (newIndex !== currentIndex + 1) {
+      throw new ValidationError("Transición de estado no permitida");
+    }
+
+    return this.orderRepository.updateStatus(orderId, newStatus as OrderStatus);
+  }
+
+  // Cancela una orden si pertenece al cliente y está pendiente.
+  async cancelOrder(orderId: string, customerId: string): Promise<Order | null> {
+    const order = await this.orderRepository.getById(orderId);
+    if (!order) return null;
+
+    // Verificar que la orden pertenezca al cliente.
+    if (order.customer_id !== customerId) {
+      throw new ValidationError("No puede cancelar un pedido de otro cliente");
+    }
+
+    // Solo se puede cancelar si está pendiente.
+    if (order.status !== "pendiente") {
+      throw new ValidationError("Solo se puede cancelar un pedido pendiente");
+    }
+
+    // TODO: reponer stock al cancelar.
+
+    return this.orderRepository.updateStatus(orderId, "cancelado");
   }
 
   private validateDeliveryType(value: unknown): "retiro" | "envio" {

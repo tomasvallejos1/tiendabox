@@ -9,6 +9,8 @@ export function createOrderRoutes(controller: OrderController): Router {
   router.get("/orders/mine", controller.getMyOrders);
   router.get("/orders", controller.getAll);
   router.get("/order/:id", controller.getById);
+  router.put("/order/:id/status", controller.changeStatus);
+  router.put("/order/:id/cancel", controller.cancel);
 
   return router;
 }
