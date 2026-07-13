@@ -61,6 +61,43 @@ export class OrderController {
     }
   };
 
+  changeStatus = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const id = req.params["id"] as string;
+      const { status } = req.body;
+
+      const order = await this.service.changeStatus(id, status);
+      if (!order) {
+        res.status(404).json({ error: "Pedido no encontrado" });
+        return;
+      }
+      res.status(200).json(order);
+    } catch (error) {
+      this.handleError(res, error);
+    }
+  };
+
+  cancel = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const id = req.params["id"] as string;
+      // TODO: reemplazar por req.user en commit 8
+      const customerId = req.body.customer_id as string;
+      if (!customerId) {
+        res.status(400).json({ error: "customer_id es obligatorio" });
+        return;
+      }
+
+      const order = await this.service.cancelOrder(id, customerId);
+      if (!order) {
+        res.status(404).json({ error: "Pedido no encontrado" });
+        return;
+      }
+      res.status(200).json(order);
+    } catch (error) {
+      this.handleError(res, error);
+    }
+  };
+
   // Mapea errores a codigos HTTP: 400 validacion, 500 inesperado.
   private handleError(res: Response, error: unknown): void {
     if (error instanceof ValidationError) {
