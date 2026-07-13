@@ -19,6 +19,12 @@ import { createUserRoutes } from "./user/user.routes";
 import { AuthService } from "./auth/auth.service";
 import { AuthController } from "./auth/auth.controller";
 import { createAuthRoutes } from "./auth/auth.routes";
+import { CartService } from "./cart/cart.service";
+import { CartController } from "./cart/cart.controller";
+import { createCartRoutes } from "./cart/cart.routes";
+import { OrderService } from "./order/order.service";
+import { OrderController } from "./order/order.controller";
+import { createOrderRoutes } from "./order/order.routes";
 
 // Composicion principal: crea Express, conecta la base e inyecta dependencias
 // manualmente (repository -> service -> controller -> routes).
@@ -79,5 +85,15 @@ export class App {
     );
     const productController = new ProductController(productService);
     this.app.use("/api", createProductRoutes(productController));
+
+    const cartRepository = this.factory.createCartRepository();
+    const cartService = new CartService(cartRepository, productRepository);
+    const cartController = new CartController(cartService);
+    this.app.use("/api", createCartRoutes(cartController));
+
+    const orderRepository = this.factory.createOrderRepository();
+    const orderService = new OrderService(orderRepository, productRepository, cartRepository);
+    const orderController = new OrderController(orderService);
+    this.app.use("/api", createOrderRoutes(orderController));
   }
 }
