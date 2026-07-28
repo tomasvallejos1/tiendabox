@@ -1,11 +1,6 @@
 // Tipos del pedido. Sin logica.
 export type OrderStatus =
-  | "pendiente"
-  | "confirmado"
-  | "en_preparacion"
-  | "listo_para_retirar"
-  | "entregado"
-  | "cancelado";
+  "pendiente" | "confirmado" | "en_preparacion" | "listo_para_retirar" | "entregado" | "cancelado";
 
 export interface OrderItem {
   id: string;

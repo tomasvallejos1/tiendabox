@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { CustomerService } from "./customer.service";
-import { ConflictError, ValidationError } from "../errors";
+import { ConflictError, ForbiddenError, ValidationError } from "../errors";
 
 // Recibe Request/Response, llama al service y devuelve codigos HTTP.
 export class CustomerController {
@@ -71,6 +71,10 @@ export class CustomerController {
     }
     if (error instanceof ConflictError) {
       res.status(409).json({ error: error.message });
+      return;
+    }
+    if (error instanceof ForbiddenError) {
+      res.status(403).json({ error: error.message });
       return;
     }
     console.error(error);

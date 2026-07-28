@@ -13,3 +13,11 @@ export class ConflictError extends Error {
     this.name = "ConflictError";
   }
 }
+
+// Error de acceso prohibido (recurso ajeno). El controller lo mapea a HTTP 403.
+export class ForbiddenError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ForbiddenError";
+  }
+}
