@@ -228,7 +228,20 @@ export class OrderService {
       throw new ValidationError("Solo se puede cancelar un pedido pendiente");
     }
 
-    // TODO: reponer stock al cancelar.
+    // Reponer stock de productos tipo stock (operación inversa al descuento en createOrder).
+    // deuda técnica: no transaccional (Postgres orders + Mongo products).
+    // Se repone antes de marcar "cancelado" para que, si updateStatus falla,
+    // el stock al menos quede corregido.
+    for (const item of order.items) {
+      if (item.type === "stock") {
+        const product = await this.productRepository.getById(item.product_id);
+        if (product) {
+          await this.productRepository.update(product.id, {
+            stock: product.stock + item.quantity,
+          });
+        }
+      }
+    }
 
     return this.orderRepository.updateStatus(orderId, "cancelado");
   }
