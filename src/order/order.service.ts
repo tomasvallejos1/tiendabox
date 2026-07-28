@@ -48,7 +48,10 @@ export class OrderService {
     let deliveryAddress: string | null = null;
 
     if (deliveryType === "envio") {
-      if (typeof input.delivery_address !== "string" || input.delivery_address.trim().length === 0) {
+      if (
+        typeof input.delivery_address !== "string" ||
+        input.delivery_address.trim().length === 0
+      ) {
         throw new ValidationError("El campo 'delivery_address' es obligatorio para envios");
       }
       deliveryAddress = input.delivery_address.trim();
