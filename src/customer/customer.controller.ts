@@ -39,7 +39,11 @@ export class CustomerController {
 
   update = async (req: Request, res: Response): Promise<void> => {
     try {
-      const customer = await this.service.update(req.params["id"] as string, req.body);
+      const id = req.params["id"] as string;
+      const userId = req.user!.id;
+      const role = req.user!.role;
+
+      const customer = await this.service.update(id, req.body, userId, role);
       if (!customer) {
         res.status(404).json({ error: "Cliente no encontrado" });
         return;
