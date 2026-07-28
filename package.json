@@ -1,7 +1,8 @@
 {
   "name": "tiendabox",
   "version": "1.0.0",
-  "description": "Trabajo de la materia desarrollo de software",
+  "description": "API REST para la gestión de una tienda de productos electrónicos con catálogo, carrito y pedidos, construida con TypeScript, Express, PostgreSQL y MongoDB",
+  "private": true,
   "main": "dist/init.js",
   "scripts": {
     "dev": "nodemon --exec ts-node src/init.ts",
@@ -15,9 +16,25 @@
     "type": "git",
     "url": "git+https://github.com/tomasvallejos1/tiendabox.git"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "api-rest",
+    "typescript",
+    "express",
+    "nodejs",
+    "postgresql",
+    "mongodb",
+    "ecommerce",
+    "arquitectura-por-capas",
+    "repository-pattern",
+    "docker",
+    "utn"
+  ],
+  "contributors": [
+    "Tomás Vallejos",
+    "Lautaro Landriel",
+    "Pedro Borda Bossana"
+  ],
+  "license": "UNLICENSED",
   "type": "commonjs",
   "bugs": {
     "url": "https://github.com/tomasvallejos1/tiendabox/issues"
