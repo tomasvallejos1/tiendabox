@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { OrderService } from "./order.service";
-import { ValidationError } from "../errors";
+import { ForbiddenError, ValidationError } from "../errors";
 
 // Recibe Request/Response, llama al service y devuelve codigos HTTP.
 export class OrderController {
@@ -38,7 +38,11 @@ export class OrderController {
 
   getById = async (req: Request, res: Response): Promise<void> => {
     try {
-      const order = await this.service.getById(req.params["id"] as string);
+      const id = req.params["id"] as string;
+      const userId = req.user!.id;
+      const role = req.user!.role;
+
+      const order = await this.service.getById(id, userId, role);
       if (!order) {
         res.status(404).json({ error: "Pedido no encontrado" });
         return;
@@ -81,10 +85,14 @@ export class OrderController {
     }
   };
 
-  // Mapea errores a codigos HTTP: 400 validacion, 500 inesperado.
+  // Mapea errores a codigos HTTP: 400 validacion, 403 prohibido, 500 inesperado.
   private handleError(res: Response, error: unknown): void {
     if (error instanceof ValidationError) {
       res.status(400).json({ error: error.message });
+      return;
+    }
+    if (error instanceof ForbiddenError) {
+      res.status(403).json({ error: error.message });
       return;
     }
     console.error(error);

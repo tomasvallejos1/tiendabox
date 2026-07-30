@@ -45,9 +45,7 @@ export class CartService {
 
     // Si el producto es tipo "stock", la cantidad no puede superar el stock disponible.
     if (product.type === "stock" && quantity > product.stock) {
-      throw new ValidationError(
-        `Stock insuficiente. Disponible: ${product.stock}`,
-      );
+      throw new ValidationError(`Stock insuficiente. Disponible: ${product.stock}`);
     }
 
     const cart = await this.getCartByCustomerId(customerId);

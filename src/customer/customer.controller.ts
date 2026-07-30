@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { CustomerService } from "./customer.service";
-import { ConflictError, ValidationError } from "../errors";
+import { ConflictError, ForbiddenError, ValidationError } from "../errors";
 
 // Recibe Request/Response, llama al service y devuelve codigos HTTP.
 export class CustomerController {
@@ -39,7 +39,11 @@ export class CustomerController {
 
   update = async (req: Request, res: Response): Promise<void> => {
     try {
-      const customer = await this.service.update(req.params["id"] as string, req.body);
+      const id = req.params["id"] as string;
+      const userId = req.user!.id;
+      const role = req.user!.role;
+
+      const customer = await this.service.update(id, req.body, userId, role);
       if (!customer) {
         res.status(404).json({ error: "Cliente no encontrado" });
         return;
@@ -71,6 +75,10 @@ export class CustomerController {
     }
     if (error instanceof ConflictError) {
       res.status(409).json({ error: error.message });
+      return;
+    }
+    if (error instanceof ForbiddenError) {
+      res.status(403).json({ error: error.message });
       return;
     }
     console.error(error);

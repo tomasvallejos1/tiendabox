@@ -2,15 +2,6 @@ import { Request, Response, NextFunction, RequestHandler } from "express";
 import { ISessionRepository } from "../session/session.repository.interface";
 import { IUserRepository } from "../user/user.repository.interface";
 
-// Extiende el tipo Request de Express para incluir el usuario autenticado.
-declare global {
-  namespace Express {
-    interface Request {
-      user?: { id: string; role: string };
-    }
-  }
-}
-
 // Factory que crea el middleware de autenticación por token de sesión.
 export function authenticate(
   sessionRepo: ISessionRepository,

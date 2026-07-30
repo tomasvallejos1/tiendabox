@@ -30,19 +30,12 @@ export class SessionRepositoryPostgres implements ISessionRepository {
   }
 
   async deleteByToken(token: string): Promise<boolean> {
-    const result = await this.pool.query(
-      `DELETE FROM sessions WHERE token = $1`,
-      [token],
-    );
+    const result = await this.pool.query(`DELETE FROM sessions WHERE token = $1`, [token]);
     return (result.rowCount ?? 0) > 0;
   }
 
   // Mapea la fila de PostgreSQL a la entidad Session.
-  private toEntity(row: {
-    token: string;
-    user_id: string;
-    expires_at: string;
-  }): Session {
+  private toEntity(row: { token: string; user_id: string; expires_at: string }): Session {
     return {
       token: row.token,
       user_id: row.user_id,
