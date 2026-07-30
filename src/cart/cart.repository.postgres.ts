@@ -80,19 +80,13 @@ export class CartRepositoryPostgres implements ICartRepository {
   }
 
   async clear(cartId: string): Promise<void> {
-    await this.pool.query(
-      `DELETE FROM cart_items WHERE cart_id = $1`,
-      [cartId],
-    );
+    await this.pool.query(`DELETE FROM cart_items WHERE cart_id = $1`, [cartId]);
     await this.touchUpdatedAt(cartId);
   }
 
   // Actualiza el timestamp del carrito en cada modificacion.
   private async touchUpdatedAt(cartId: string): Promise<void> {
-    await this.pool.query(
-      `UPDATE carts SET updated_at = NOW() WHERE id = $1`,
-      [cartId],
-    );
+    await this.pool.query(`UPDATE carts SET updated_at = NOW() WHERE id = $1`, [cartId]);
   }
 
   // Mapea una fila de cart_items a la entidad CartItem.

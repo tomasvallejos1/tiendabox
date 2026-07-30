@@ -28,7 +28,14 @@ export class OrderRepositoryPostgres implements IOrderRepository {
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id, customer_id, status, delivery_type, delivery_address,
                  total::text, created_at::text AS created_at`,
-      [orderId, data.customer_id, data.status, data.delivery_type, data.delivery_address, data.total],
+      [
+        orderId,
+        data.customer_id,
+        data.status,
+        data.delivery_type,
+        data.delivery_address,
+        data.total,
+      ],
     );
 
     const items: OrderItem[] = [];
@@ -37,7 +44,15 @@ export class OrderRepositoryPostgres implements IOrderRepository {
       await this.pool.query(
         `INSERT INTO order_items (id, order_id, product_id, product_name, unit_price, quantity, type)
          VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [itemId, orderId, item.product_id, item.product_name, item.unit_price, item.quantity, item.type],
+        [
+          itemId,
+          orderId,
+          item.product_id,
+          item.product_name,
+          item.unit_price,
+          item.quantity,
+          item.type,
+        ],
       );
       items.push({
         id: itemId,

@@ -4,7 +4,8 @@ import { CustomerController } from "./customer.controller";
 // Define los endpoints de Customer y los asocia al controlador.
 // GET /customers: solo owner. GET /customer/:id: cualquier logueado.
 // PUT /customer/:id: cualquier logueado (el service valida pertenencia).
-// POST y DELETE: sin guards (POST se usa en register, DELETE solo owner).
+// POST /customer: solo owner (el registro de clientes va por /api/auth/register).
+// DELETE /customer/:id: solo owner.
 export function createCustomerRoutes(
   controller: CustomerController,
   guards?: { auth: RequestHandler; ownerOnly: RequestHandler },
@@ -14,7 +15,7 @@ export function createCustomerRoutes(
   if (guards) {
     router.get("/customers", guards.auth, guards.ownerOnly, controller.getAll);
     router.get("/customer/:id", guards.auth, controller.getById);
-    router.post("/customer", controller.create);
+    router.post("/customer", guards.auth, guards.ownerOnly, controller.create);
     router.put("/customer/:id", guards.auth, controller.update);
     router.delete("/customer/:id", guards.auth, guards.ownerOnly, controller.delete);
   } else {

@@ -1,7 +1,8 @@
 {
   "name": "tiendabox",
   "version": "1.0.0",
-  "description": "Trabajo de la materia desarrollo de software",
+  "description": "API REST para la gestión de una tienda de productos electrónicos con catálogo, carrito y pedidos, construida con TypeScript, Express, PostgreSQL y MongoDB",
+  "private": true,
   "main": "dist/init.js",
   "scripts": {
     "dev": "nodemon --exec ts-node src/init.ts",
@@ -15,9 +16,25 @@
     "type": "git",
     "url": "git+https://github.com/tomasvallejos1/tiendabox.git"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "api-rest",
+    "typescript",
+    "express",
+    "nodejs",
+    "postgresql",
+    "mongodb",
+    "ecommerce",
+    "arquitectura-por-capas",
+    "repository-pattern",
+    "docker",
+    "utn"
+  ],
+  "contributors": [
+    "Tomás Vallejos",
+    "Lautaro Landriel",
+    "Pedro Borda Bossana"
+  ],
+  "license": "UNLICENSED",
   "type": "commonjs",
   "bugs": {
     "url": "https://github.com/tomasvallejos1/tiendabox/issues"
@@ -31,6 +48,7 @@
     "@types/express": "^5.0.6",
     "@types/node": "^25.9.3",
     "@types/pg": "^8.20.0",
+    "@types/swagger-ui-express": "^4.1.8",
     "@typescript-eslint/eslint-plugin": "^8.61.1",
     "@typescript-eslint/parser": "^8.61.1",
     "eslint": "^10.5.0",
@@ -45,6 +63,7 @@
     "dotenv": "^16.6.1",
     "express": "^5.2.1",
     "mongodb": "^6.21.0",
-    "pg": "^8.22.0"
+    "pg": "^8.22.0",
+    "swagger-ui-express": "^5.0.1"
   }
 }

@@ -3,7 +3,7 @@ import { IOrderRepository } from "./order.repository.interface";
 import { IProductRepository } from "../product/product.repository.interface";
 import { ICartRepository } from "../cart/cart.repository.interface";
 import { ICustomerRepository } from "../customer/customer.repository.interface";
-import { ValidationError } from "../errors";
+import { ValidationError, ForbiddenError } from "../errors";
 
 // Logica de negocio de pedidos. Valida productos, stock, y delivery.
 
@@ -48,7 +48,10 @@ export class OrderService {
     let deliveryAddress: string | null = null;
 
     if (deliveryType === "envio") {
-      if (typeof input.delivery_address !== "string" || input.delivery_address.trim().length === 0) {
+      if (
+        typeof input.delivery_address !== "string" ||
+        input.delivery_address.trim().length === 0
+      ) {
         throw new ValidationError("El campo 'delivery_address' es obligatorio para envios");
       }
       deliveryAddress = input.delivery_address.trim();
@@ -168,8 +171,20 @@ export class OrderService {
     return this.orderRepository.getAll(statusFilter);
   }
 
-  async getById(id: string): Promise<Order | null> {
-    return this.orderRepository.getById(id);
+  async getById(orderId: string, userId: string, role: string): Promise<Order | null> {
+    const order = await this.orderRepository.getById(orderId);
+    if (!order) return null;
+
+    // El owner puede ver cualquier pedido.
+    if (role === "owner") return order;
+
+    // Para otros roles, verificar que la orden pertenezca al cliente.
+    const customerId = await this.resolveCustomerId(userId);
+    if (order.customer_id !== customerId) {
+      throw new ForbiddenError("No tiene permiso para ver este pedido");
+    }
+
+    return order;
   }
 
   // Avanza el estado de la orden un paso en el flujo lineal (owner).
@@ -213,7 +228,20 @@ export class OrderService {
       throw new ValidationError("Solo se puede cancelar un pedido pendiente");
     }
 
-    // TODO: reponer stock al cancelar.
+    // Reponer stock de productos tipo stock (operación inversa al descuento en createOrder).
+    // deuda técnica: no transaccional (Postgres orders + Mongo products).
+    // Se repone antes de marcar "cancelado" para que, si updateStatus falla,
+    // el stock al menos quede corregido.
+    for (const item of order.items) {
+      if (item.type === "stock") {
+        const product = await this.productRepository.getById(item.product_id);
+        if (product) {
+          await this.productRepository.update(product.id, {
+            stock: product.stock + item.quantity,
+          });
+        }
+      }
+    }
 
     return this.orderRepository.updateStatus(orderId, "cancelado");
   }

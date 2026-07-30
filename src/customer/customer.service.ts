@@ -1,6 +1,6 @@
 import { Customer } from "./customer.entity";
 import { ICustomerRepository } from "./customer.repository.interface";
-import { ValidationError } from "../errors";
+import { ForbiddenError, ValidationError } from "../errors";
 
 // Valores validos para tax_status.
 const VALID_TAX_STATUSES = [
@@ -50,7 +50,17 @@ export class CustomerService {
       phone?: unknown;
       address?: unknown;
     },
+    userId: string,
+    role: string,
   ): Promise<Customer | null> {
+    // Validar pertenencia: solo el owner puede editar cualquier cliente.
+    if (role !== "owner") {
+      const own = await this.repository.getByUserId(userId);
+      if (!own || own.id !== id) {
+        throw new ForbiddenError("No tiene permiso para modificar este cliente");
+      }
+    }
+
     const data: Partial<Omit<Customer, "id" | "user_id" | "created_at">> = {};
 
     if (input.name !== undefined) {

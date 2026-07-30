@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { CartService } from "./cart.service";
-import { ValidationError } from "../errors";
+import { ForbiddenError, ValidationError } from "../errors";
 
 // Recibe Request/Response, llama al service y devuelve codigos HTTP.
 export class CartController {
@@ -52,6 +52,10 @@ export class CartController {
   private handleError(res: Response, error: unknown): void {
     if (error instanceof ValidationError) {
       res.status(400).json({ error: error.message });
+      return;
+    }
+    if (error instanceof ForbiddenError) {
+      res.status(403).json({ error: error.message });
       return;
     }
     console.error(error);
