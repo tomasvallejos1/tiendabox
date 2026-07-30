@@ -1,4 +1,6 @@
 import express, { Express } from "express";
+import swaggerUi from "swagger-ui-express";
+import openApiSpec from "./docs/openapi";
 import { AppConfig, loadConfig } from "./config";
 import { DatabaseProviderFactory } from "./db/database-provider.factory";
 import { CategoryService } from "./category/category.service";
@@ -45,10 +47,12 @@ export class App {
     await this.factory.connect();
 
     this.app.use(express.json());
+    this.app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(openApiSpec));
     await this.registerRoutes();
 
     this.app.listen(this.config.port, () => {
       console.log(`TiendaBox escuchando en http://localhost:${this.config.port}`);
+      console.log(`Documentación API en http://localhost:${this.config.port}/api-docs`);
     });
   }
 
