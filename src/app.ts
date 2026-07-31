@@ -1,5 +1,6 @@
 import express, { Express } from "express";
 import swaggerUi from "swagger-ui-express";
+import "./middlewares/auth.types";
 import openApiSpec from "./docs/openapi";
 import { AppConfig, loadConfig } from "./config";
 import { DatabaseProviderFactory } from "./db/database-provider.factory";
