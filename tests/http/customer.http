@@ -1,25 +1,107 @@
-### Crear un Cliente 
-POST http://localhost:3000/api/customer
+### TiendaBox - Pruebas del recurso Customer
+### GET /customer/:id y PUT /customer/:id: cualquier usuario logueado
+### (PUT solo puede editar su propio perfil, salvo que sea owner).
+### GET /customers, POST /customer y DELETE /customer/:id: solo owner.
+### Ejecutar en orden: crea su propio usuario base y su perfil de cliente,
+### y reutiliza tokens/ids automaticamente.
+
+@host = http://localhost:3000
+@userEmail = customer.test@example.com
+@userPassword = secreto123
+
+### 1. Login owner -> 200 OK
+# @name loginOwner
+POST {{host}}/api/auth/login
 Content-Type: application/json
 
 {
-  "name": "Juan Pérez",
-  "email": "juan.perez@email.com"
+  "email": "admin@tiendabox.com",
+  "password": "admin123"
 }
 
-### Listar todos los Clientes
-GET http://localhost:3000/api/customers
-
-### Ver un Cliente específico (Reemplazá el ID)
-GET http://localhost:3000/api/customer/e225721b-4657-4e7d-ab9e-a15a85b1c7c8
-
-### Editar un Cliente (Reemplazá el ID)
-PUT http://localhost:3000/api/customer/e225721b-4657-4e7d-ab9e-a15a85b1c7c8
+### 2. Crear usuario base para el cliente de prueba -> 201 Created
+# Si ya se ejecuto antes, el email queda ocupado (409). Para una corrida
+# limpia, cambia @userEmail arriba.
+# @name createUser
+POST {{host}}/api/user
 Content-Type: application/json
 
 {
-  "name": "Juan Martín Pérez"
+  "email": "{{userEmail}}",
+  "password": "{{userPassword}}",
+  "role": "cliente"
 }
 
-### Borrar un Cliente (Reemplazá el ID)
-DELETE http://localhost:3000/api/customer/64b5f9...
+### 3. Crear perfil de cliente (owner) -> 201 Created
+# @name createCustomer
+POST {{host}}/api/customer
+Content-Type: application/json
+Authorization: Bearer {{loginOwner.response.body.$.token}}
+
+{
+  "user_id": "{{createUser.response.body.$.id}}",
+  "name": "Juan Perez"
+}
+
+### 4. Crear cliente sin token -> 401 No autenticado
+POST {{host}}/api/customer
+Content-Type: application/json
+
+{
+  "user_id": "{{createUser.response.body.$.id}}",
+  "name": "Sin auth"
+}
+
+### 5. Login del cliente de prueba, para probar la edicion de su propio perfil -> 200 OK
+# @name loginCliente
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{userEmail}}",
+  "password": "{{userPassword}}"
+}
+
+### 6. Listar todos los clientes (owner) -> 200 OK
+GET {{host}}/api/customers
+Authorization: Bearer {{loginOwner.response.body.$.token}}
+
+### 7. Listar clientes sin ser owner -> 403 No autorizado
+GET {{host}}/api/customers
+Authorization: Bearer {{loginCliente.response.body.$.token}}
+
+### 8. Ver un cliente especifico, cualquier logueado -> 200 OK
+GET {{host}}/api/customer/{{createCustomer.response.body.$.id}}
+Authorization: Bearer {{loginCliente.response.body.$.token}}
+
+### 9. Editar el propio perfil (cliente autenticado) -> 200 OK
+PUT {{host}}/api/customer/{{createCustomer.response.body.$.id}}
+Content-Type: application/json
+Authorization: Bearer {{loginCliente.response.body.$.token}}
+
+{
+  "name": "Juan Martin Perez"
+}
+
+### 10. Intentar editar el perfil de otro cliente -> 403 No autorizado
+# La verificacion de pertenencia se hace antes que la de existencia: cualquier
+# id que no sea el propio devuelve 403, exista o no.
+PUT {{host}}/api/customer/00000000-0000-0000-0000-000000000000
+Content-Type: application/json
+Authorization: Bearer {{loginCliente.response.body.$.token}}
+
+{
+  "name": "Intento ajeno"
+}
+
+### 11. Eliminar cliente sin ser owner -> 403 No autorizado
+DELETE {{host}}/api/customer/{{createCustomer.response.body.$.id}}
+Authorization: Bearer {{loginCliente.response.body.$.token}}
+
+### 12. Eliminar cliente (owner) -> 204 No Content
+DELETE {{host}}/api/customer/{{createCustomer.response.body.$.id}}
+Authorization: Bearer {{loginOwner.response.body.$.token}}
+
+### 13. Eliminar de nuevo el mismo cliente -> 404 Not Found
+DELETE {{host}}/api/customer/{{createCustomer.response.body.$.id}}
+Authorization: Bearer {{loginOwner.response.body.$.token}}

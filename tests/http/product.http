@@ -1,14 +1,47 @@
 ### TiendaBox - Pruebas del recurso Product
+### Ejecutar en orden. Crea su propia categoria y marca de prueba (con un
+### sufijo {{$timestamp}} para poder correr el archivo mas de una vez sin
+### chocar con nombres ya usados) y reutiliza el token del owner y los ids
+### generados automaticamente, sin copiar y pegar nada.
+### GET son publicos; POST/PUT/DELETE requieren login como owner.
+
 @host = http://localhost:3000
 
-### Variables: reemplazar o crear con ids validos (pueden obtenerse al crear una Category y una Brand de prueba)
-@categoryId = 6a31a2cd2915ac8a7c6afde3
-@brandId = 6951692b-79a3-41c4-b8e0-2c95e3e8e5ba
-@productId = 13a0aee3-3712-42e9-b96c-8fd5fd833f53
+### 0. Login owner -> 200 OK
+# @name loginOwner
+POST {{host}}/api/auth/login
+Content-Type: application/json
 
-### 1. Crear producto en stock -> 201 Created (copiar el "id" del body a @productId)
+{
+  "email": "admin@tiendabox.com",
+  "password": "admin123"
+}
+
+### 0.1 Crear categoria de prueba (owner) -> 201 Created
+# @name createCategory
+POST {{host}}/api/category
+Content-Type: application/json
+Authorization: Bearer {{loginOwner.response.body.$.token}}
+
+{
+  "name": "Notebooks Test {{$timestamp}}"
+}
+
+### 0.2 Crear marca de prueba (owner) -> 201 Created
+# @name createBrand
+POST {{host}}/api/brand
+Content-Type: application/json
+Authorization: Bearer {{loginOwner.response.body.$.token}}
+
+{
+  "name": "Apple Test {{$timestamp}}"
+}
+
+### 1. Crear producto tipo stock (owner) -> 201 Created
+# @name createProduct
 POST {{host}}/api/product
 Content-Type: application/json
+Authorization: Bearer {{loginOwner.response.body.$.token}}
 
 {
   "name": "Macbook Pro 14",
@@ -16,75 +49,106 @@ Content-Type: application/json
   "type": "stock",
   "price": 99.99,
   "stock": 10,
-  "category_id": "{{categoryId}}",
-  "brand_id": "{{brandId}}"
+  "category_id": "{{createCategory.response.body.$.id}}",
+  "brand_id": "{{createBrand.response.body.$.id}}"
 }
 
-### Pegar aca el id devuelto por el POST anterior
-@productId = 13a0aee3-3712-42e9-b96c-8fd5fd833f53
-
-### 2. Crear producto por encargo -> 201 Created
+### 2. Crear producto tipo encargo (owner) -> 201 Created
 POST {{host}}/api/product
 Content-Type: application/json
+Authorization: Bearer {{loginOwner.response.body.$.token}}
 
 {
   "name": "Iphone 17 Pro",
   "type": "encargo",
-  "category_id": "{{categoryId}}",
-  "brand_id": "{{brandId}}"
+  "category_id": "{{createCategory.response.body.$.id}}",
+  "brand_id": "{{createBrand.response.body.$.id}}"
 }
 
-### 3. Listar todos los productos -> 200 OK
+### 3. Crear producto sin token -> 401 No autenticado
+POST {{host}}/api/product
+Content-Type: application/json
+
+{
+  "name": "Sin auth",
+  "type": "stock",
+  "price": 10,
+  "stock": 1,
+  "category_id": "{{createCategory.response.body.$.id}}",
+  "brand_id": "{{createBrand.response.body.$.id}}"
+}
+
+### 4. Crear producto tipo stock SIN price (owner) -> 400 Bad Request
+POST {{host}}/api/product
+Content-Type: application/json
+Authorization: Bearer {{loginOwner.response.body.$.token}}
+
+{
+  "name": "Producto sin precio",
+  "type": "stock",
+  "stock": 5,
+  "category_id": "{{createCategory.response.body.$.id}}",
+  "brand_id": "{{createBrand.response.body.$.id}}"
+}
+
+### 5. Crear producto con type invalido (owner) -> 400 Bad Request
+POST {{host}}/api/product
+Content-Type: application/json
+Authorization: Bearer {{loginOwner.response.body.$.token}}
+
+{
+  "name": "Producto invalido",
+  "type": "otro",
+  "category_id": "{{createCategory.response.body.$.id}}",
+  "brand_id": "{{createBrand.response.body.$.id}}"
+}
+
+### 6. Listar todos los productos (publico) -> 200 OK
 GET {{host}}/api/products
 
-### 4. Filtrar por category_id -> 200 OK
-GET {{host}}/api/products?category_id={{categoryId}}
+### 7. Filtrar por category_id (publico) -> 200 OK
+GET {{host}}/api/products?category_id={{createCategory.response.body.$.id}}
 
-### 5. Filtrar por brand_id -> 200 OK
-GET {{host}}/api/products?brand_id={{brandId}}
+### 8. Filtrar por brand_id (publico) -> 200 OK
+GET {{host}}/api/products?brand_id={{createBrand.response.body.$.id}}
 
-### 6. Obtener producto por id -> 200 OK
-GET {{host}}/api/product/{{productId}}
+### 9. Obtener producto por id (publico) -> 200 OK
+GET {{host}}/api/product/{{createProduct.response.body.$.id}}
 
-### 7. Actualizar precio y stock -> 200 OK
-PUT {{host}}/api/product/{{productId}}
+### 10. Obtener producto inexistente -> 404 Not Found
+GET {{host}}/api/product/00000000-0000-0000-0000-000000000000
+
+### 11. Actualizar precio y stock (owner) -> 200 OK
+PUT {{host}}/api/product/{{createProduct.response.body.$.id}}
 Content-Type: application/json
+Authorization: Bearer {{loginOwner.response.body.$.token}}
 
 {
   "price": 79.5,
   "stock": 5
 }
 
-### 8. Cambiar de stock a encargo (debe forzar price=null y stock=0) -> 200 OK
-PUT {{host}}/api/product/{{productId}}
+### 12. Cambiar de stock a encargo, fuerza price=null y stock=0 (owner) -> 200 OK
+PUT {{host}}/api/product/{{createProduct.response.body.$.id}}
 Content-Type: application/json
+Authorization: Bearer {{loginOwner.response.body.$.token}}
 
 {
   "type": "encargo"
 }
 
-### 9. Baja logica (soft delete) -> 204 No Content
-DELETE {{host}}/api/product/{{productId}}
-
-### 10. Crear producto tipo stock SIN price -> 400 Bad Request (falla)
-POST {{host}}/api/product
+### 13. Actualizar producto sin token -> 401 No autenticado
+PUT {{host}}/api/product/{{createProduct.response.body.$.id}}
 Content-Type: application/json
 
 {
-  "name": "Producto fallo",
-  "type": "stock",
-  "stock": 5,
-  "category_id": "{{categoryId}}",
-  "brand_id": "{{brandId}}"
+  "price": 1
 }
 
-### 11. Crear producto con type invalido -> 400 Bad Request (falla)
-POST {{host}}/api/product
-Content-Type: application/json
+### 14. Baja logica del producto, soft delete (owner) -> 204 No Content
+DELETE {{host}}/api/product/{{createProduct.response.body.$.id}}
+Authorization: Bearer {{loginOwner.response.body.$.token}}
 
-{
-  "name": "Producto invalido",
-  "type": "otro",
-  "category_id": "{{categoryId}}",
-  "brand_id": "{{brandId}}"
-}
+### 15. Borrar de nuevo el mismo producto -> 404 Not Found
+DELETE {{host}}/api/product/{{createProduct.response.body.$.id}}
+Authorization: Bearer {{loginOwner.response.body.$.token}}

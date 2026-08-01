@@ -1,37 +1,70 @@
 ### TiendaBox - Pruebas del recurso User
-@host = http://localhost:3000
+### Nota: estas rutas no requieren autenticacion actualmente
+### (ver src/user/user.routes.ts, montadas sin guards en app.ts).
 
-### 1. Crear usuario -> 201 Created (copiar el "id" del body a @userId)
+@host = http://localhost:3000
+@userEmail = nuevo@example.com
+
+### 1. Crear usuario -> 201 Created
+# Si ya se ejecuto antes, el email queda ocupado (ver caso 2, 409 Conflict).
+# Para volver a probar un alta limpia, cambia @userEmail arriba.
+# @name createUser
 POST {{host}}/api/user
 Content-Type: application/json
 
 {
-  "email": "nuevo3534@example.com",
+  "email": "{{userEmail}}",
   "password": "secreto123",
   "role": "cliente"
 }
 
-### Pegar aca el id devuelto por el POST anterior
-@userId = 7d75ecd3-8971-41d9-88c9-655a216302c0
+### 2. Crear usuario con email duplicado -> 409 Conflict
+POST {{host}}/api/user
+Content-Type: application/json
 
-### 2. Listar todos los usuarios -> 200 OK
+{
+  "email": "{{userEmail}}",
+  "password": "secreto123"
+}
+
+### 3. Crear usuario con password corta -> 400 Bad Request
+POST {{host}}/api/user
+Content-Type: application/json
+
+{
+  "email": "otro@example.com",
+  "password": "123"
+}
+
+### 4. Crear usuario con role invalido -> 400 Bad Request
+POST {{host}}/api/user
+Content-Type: application/json
+
+{
+  "email": "otro2@example.com",
+  "password": "secreto123",
+  "role": "admin"
+}
+
+### 5. Listar todos los usuarios -> 200 OK
 GET {{host}}/api/users
 
-### 3. Obtener usuario por id -> 200 OK
-GET {{host}}/api/user/{{userId}}
+### 6. Obtener usuario por id -> 200 OK
+# Usa el id devuelto en el caso 1, sin copiar y pegar nada.
+GET {{host}}/api/user/{{createUser.response.body.$.id}}
 
-### 4. Obtener usuario inexistente -> 404 Not Found
+### 7. Obtener usuario inexistente -> 404 Not Found
 GET {{host}}/api/user/00000000-0000-0000-0000-000000000000
 
-### 5. Actualizar email del usuario -> 200 OK
-PUT {{host}}/api/user/{{userId}}
+### 8. Actualizar email del usuario -> 200 OK
+PUT {{host}}/api/user/{{createUser.response.body.$.id}}
 Content-Type: application/json
 
 {
   "email": "actualizado@example.com"
 }
 
-### 6. Actualizar usuario inexistente -> 404 Not Found
+### 9. Actualizar usuario inexistente -> 404 Not Found
 PUT {{host}}/api/user/00000000-0000-0000-0000-000000000000
 Content-Type: application/json
 
@@ -39,8 +72,8 @@ Content-Type: application/json
   "email": "otro@example.com"
 }
 
-### 7. Eliminar usuario -> 204 No Content
-DELETE {{host}}/api/user/{{userId}}
+### 10. Eliminar usuario -> 204 No Content
+DELETE {{host}}/api/user/{{createUser.response.body.$.id}}
 
-### 8. Eliminar de nuevo el mismo usuario -> 404 Not Found
-DELETE {{host}}/api/user/{{userId}}
+### 11. Eliminar de nuevo el mismo usuario -> 404 Not Found
+DELETE {{host}}/api/user/{{createUser.response.body.$.id}}

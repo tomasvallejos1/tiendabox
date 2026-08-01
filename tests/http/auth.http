@@ -1,28 +1,39 @@
 ### TiendaBox - Pruebas del recurso Auth
-@host = http://localhost:3000
+### Requiere la extension "REST Client" de VS Code.
+### Ejecutar los requests en orden (boton "Send Request" arriba de cada uno).
+### Los requests marcados con "# @name" guardan su respuesta para que otros
+### requests reutilicen el token automaticamente, sin copiar y pegar nada
+### (ej: {{loginCliente.response.body.$.token}}).
 
-### 1. Registro exitoso de cliente -> 201 Created
+@host = http://localhost:3000
+@clienteEmail = tomas@gmail.com
+@clientePassword = prueba123
+
+### 1. Registrar cliente -> 201 Created
+# Si ya se ejecuto antes, el email queda ocupado (ver caso 5, 409 Conflict).
+# Para volver a probar un registro limpio, cambia @clienteEmail arriba.
 POST {{host}}/api/auth/register
 Content-Type: application/json
 
 {
   "name": "Tomas Vallejos",
-  "email": "tomas@gmail.com",
-  "password": "prueba123"
+  "email": "{{clienteEmail}}",
+  "password": "{{clientePassword}}"
 }
 
-### 2. Login cliente (debe devolver role: "cliente") -> 200 OK
-# Guardar el token del response para usar en las pruebas autenticadas.
+### 2. Login cliente -> 200 OK (role: "cliente")
+# @name loginCliente
 POST {{host}}/api/auth/login
 Content-Type: application/json
 
 {
-  "email": "tomas@gmail.com",
-  "password": "prueba123"
+  "email": "{{clienteEmail}}",
+  "password": "{{clientePassword}}"
 }
 
-### 3. Login owner (debe devolver role: "owner") -> 200 OK
-# Guardar el token del response para usar en las pruebas de owner.
+### 3. Login owner -> 200 OK (role: "owner")
+# Usuario precargado por init.sql.
+# @name loginOwner
 POST {{host}}/api/auth/login
 Content-Type: application/json
 
@@ -31,22 +42,23 @@ Content-Type: application/json
   "password": "admin123"
 }
 
-### 4. Login con password incorrecta -> 400 Bad Request ("Credenciales inválidas")
+### 4. Login con password incorrecta -> 400 Bad Request ("Credenciales invalidas")
 POST {{host}}/api/auth/login
 Content-Type: application/json
 
 {
-  "email": "tomas@gmail.com",
+  "email": "{{clienteEmail}}",
   "password": "incorrecta"
 }
 
 ### 5. Registro con email duplicado -> 409 Conflict
+# Requiere haber ejecutado el caso 1 antes (o cualquier registro previo con este email).
 POST {{host}}/api/auth/register
 Content-Type: application/json
 
 {
   "name": "Otro",
-  "email": "tomas@gmail.com",
+  "email": "{{clienteEmail}}",
   "password": "123456"
 }
 
@@ -59,7 +71,12 @@ Content-Type: application/json
   "email": "sinpass@example.com"
 }
 
-### 7. Logout -> 200 OK
-# Pegar el token obtenido en el login.
+### 7. Logout cliente -> 204 No Content
+# Reutiliza el token del caso 2 automaticamente.
 POST {{host}}/api/auth/logout
-Authorization: Bearer <token_cliente>
+Authorization: Bearer {{loginCliente.response.body.$.token}}
+
+### 8. Logout sin token -> 204 No Content
+# El endpoint no valida el token antes de intentar borrar la sesion
+# (a diferencia del resto de las rutas protegidas), por eso no da 401.
+POST {{host}}/api/auth/logout

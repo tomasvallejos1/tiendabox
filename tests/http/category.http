@@ -1,65 +1,111 @@
 ### TiendaBox - Pruebas del recurso Category
+### Ejecutar en orden. El login del owner se hace una sola vez (caso 0) y su
+### token se reutiliza automaticamente en los casos que lo necesitan.
+### GET son publicos; POST/PUT/DELETE requieren login como owner.
+
 @host = http://localhost:3000
 
-### 1. Crear categoria -> 201 Created 
+### 0. Login owner -> 200 OK
+# @name loginOwner
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@tiendabox.com",
+  "password": "admin123"
+}
+
+### 1. Crear categoria (owner) -> 201 Created
+# @name createCategory
+POST {{host}}/api/category
+Content-Type: application/json
+Authorization: Bearer {{loginOwner.response.body.$.token}}
+
+{
+  "name": "Auriculares",
+  "description": "Auriculares y audifonos"
+}
+
+### 2. Crear categoria sin token -> 401 No autenticado
 POST {{host}}/api/category
 Content-Type: application/json
 
 {
-  "name": "Auriculares",
-  "description": "auriculares y audífonos"
+  "name": "Sin auth"
 }
 
-### Pegar aca el id devuelto por el POST anterior
-@categoryId = 6a31a2872915ac8a7c6afde2
-
-### 2. Crear categoria sin name -> 400 Bad Request
+### 3. Crear categoria sin name -> 400 Bad Request
 POST {{host}}/api/category
 Content-Type: application/json
+Authorization: Bearer {{loginOwner.response.body.$.token}}
 
 {}
 
-### 3. Crear categoria con name > 100 caracteres -> 400 Bad Request
+### 4. Crear categoria con name > 100 caracteres -> 400 Bad Request
 POST {{host}}/api/category
 Content-Type: application/json
+Authorization: Bearer {{loginOwner.response.body.$.token}}
 
 {
   "name": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAX"
 }
 
-### 4. Listar todas las categorias -> 200 OK
+### 5. Crear categoria con nombre repetido -> 409 Conflict
+POST {{host}}/api/category
+Content-Type: application/json
+Authorization: Bearer {{loginOwner.response.body.$.token}}
+
+{
+  "name": "Auriculares"
+}
+
+### 6. Listar todas las categorias (publico) -> 200 OK
 GET {{host}}/api/categories
 
-### 5. Obtener categoria por id -> 200 OK
-GET {{host}}/api/category/{{categoryId}}
+### 7. Obtener categoria por id (publico) -> 200 OK
+# Usa el id devuelto en el caso 1, sin copiar y pegar nada.
+GET {{host}}/api/category/{{createCategory.response.body.$.id}}
 
-### 6. Obtener categoria inexistente -> 404 Not Found
-GET {{host}}/api/category/000000000000000000000000
+### 8. Obtener categoria inexistente -> 404 Not Found
+GET {{host}}/api/category/00000000-0000-0000-0000-000000000000
 
-### 7. Actualizar categoria -> 200 OK
-PUT {{host}}/api/category/{{categoryId}}
+### 9. Actualizar categoria (owner) -> 200 OK
+PUT {{host}}/api/category/{{createCategory.response.body.$.id}}
+Content-Type: application/json
+Authorization: Bearer {{loginOwner.response.body.$.token}}
+
+{
+  "description": "Auriculares, audifonos y headsets"
+}
+
+### 10. Actualizar categoria sin token -> 401 No autenticado
+PUT {{host}}/api/category/{{createCategory.response.body.$.id}}
 Content-Type: application/json
 
 {
-  "description": "Notebooks y ultrabooks"
+  "description": "Sin auth"
 }
 
-### 8. Actualizar con body vacio -> 400 Bad Request
-PUT {{host}}/api/category/{{categoryId}}
+### 11. Actualizar con body vacio (owner) -> 400 Bad Request
+PUT {{host}}/api/category/{{createCategory.response.body.$.id}}
 Content-Type: application/json
+Authorization: Bearer {{loginOwner.response.body.$.token}}
 
 {}
 
-### 9. Actualizar categoria inexistente -> 404 Not Found
-PUT {{host}}/api/category/000000000000000000000000
+### 12. Actualizar categoria inexistente (owner) -> 404 Not Found
+PUT {{host}}/api/category/00000000-0000-0000-0000-000000000000
 Content-Type: application/json
+Authorization: Bearer {{loginOwner.response.body.$.token}}
 
 {
   "name": "Otra"
 }
 
-### 10. Eliminar categoria -> 204 No Content
-DELETE {{host}}/api/category/{{categoryId}}
+### 13. Eliminar categoria (owner) -> 204 No Content
+DELETE {{host}}/api/category/{{createCategory.response.body.$.id}}
+Authorization: Bearer {{loginOwner.response.body.$.token}}
 
-### 11. Eliminar de nuevo la misma categoria -> 404 Not Found
-DELETE {{host}}/api/category/{{categoryId}}
+### 14. Eliminar de nuevo la misma categoria -> 404 Not Found
+DELETE {{host}}/api/category/{{createCategory.response.body.$.id}}
+Authorization: Bearer {{loginOwner.response.body.$.token}}

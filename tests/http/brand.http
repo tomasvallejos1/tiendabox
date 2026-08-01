@@ -1,25 +1,86 @@
-### Crear una Marca
-POST http://localhost:3000/api/brand
+### TiendaBox - Pruebas del recurso Brand
+### Ejecutar en orden. El login del owner se hace una sola vez (caso 0) y su
+### token se reutiliza automaticamente en los casos que lo necesitan.
+### GET son publicos; POST/PUT/DELETE requieren login como owner.
+
+@host = http://localhost:3000
+
+### 0. Login owner -> 200 OK
+# @name loginOwner
+POST {{host}}/api/auth/login
 Content-Type: application/json
+
+{
+  "email": "admin@tiendabox.com",
+  "password": "admin123"
+}
+
+### 1. Crear marca (owner) -> 201 Created
+# @name createBrand
+POST {{host}}/api/brand
+Content-Type: application/json
+Authorization: Bearer {{loginOwner.response.body.$.token}}
 
 {
   "name": "Apple",
   "logo_url": "https://ejemplo.com/apple-logo.png"
 }
 
-### Listar todas las Marcas
-GET http://localhost:3000/api/brands
-
-### Ver una Marca específica (Reemplazá el ID)
-GET http://localhost:3000/api/brand/6951692b-79a3-41c4-b8e0-2c95e3e8e5ba
-
-### Editar una Marca (Reemplazá el ID)
-PUT http://localhost:3000/api/brand/6951692b-79a3-41c4-b8e0-2c95e3e8e5ba
+### 2. Crear marca sin token -> 401 No autenticado
+POST {{host}}/api/brand
 Content-Type: application/json
+
+{
+  "name": "Sin auth"
+}
+
+### 3. Crear marca sin name -> 400 Bad Request
+POST {{host}}/api/brand
+Content-Type: application/json
+Authorization: Bearer {{loginOwner.response.body.$.token}}
+
+{}
+
+### 4. Crear marca con nombre repetido -> 409 Conflict
+POST {{host}}/api/brand
+Content-Type: application/json
+Authorization: Bearer {{loginOwner.response.body.$.token}}
+
+{
+  "name": "Apple"
+}
+
+### 5. Listar todas las marcas (publico) -> 200 OK
+GET {{host}}/api/brands
+
+### 6. Obtener marca por id (publico) -> 200 OK
+# Usa el id devuelto en el caso 1, sin copiar y pegar nada.
+GET {{host}}/api/brand/{{createBrand.response.body.$.id}}
+
+### 7. Obtener marca inexistente -> 404 Not Found
+GET {{host}}/api/brand/00000000-0000-0000-0000-000000000000
+
+### 8. Editar marca (owner) -> 200 OK
+PUT {{host}}/api/brand/{{createBrand.response.body.$.id}}
+Content-Type: application/json
+Authorization: Bearer {{loginOwner.response.body.$.token}}
 
 {
   "name": "Samsung"
 }
 
-### Borrar una Marca (Reemplazá el ID)
-DELETE http://localhost:3000/api/brand/6951692b-79a3-41c4-b8e0-2c95e3e8e5ba
+### 9. Editar marca sin token -> 401 No autenticado
+PUT {{host}}/api/brand/{{createBrand.response.body.$.id}}
+Content-Type: application/json
+
+{
+  "name": "Sin auth"
+}
+
+### 10. Borrar marca (owner) -> 204 No Content
+DELETE {{host}}/api/brand/{{createBrand.response.body.$.id}}
+Authorization: Bearer {{loginOwner.response.body.$.token}}
+
+### 11. Borrar de nuevo la misma marca -> 404 Not Found
+DELETE {{host}}/api/brand/{{createBrand.response.body.$.id}}
+Authorization: Bearer {{loginOwner.response.body.$.token}}

@@ -1,62 +1,143 @@
 ### TiendaBox - Pruebas del recurso Cart
-### Todas las rutas requieren auth + rol "cliente".
-### Antes de ejecutar, hacer login como cliente y pegar el token.
-@host = http://localhost:3000
-@token = <token_cliente>
+### Todas las rutas requieren login como cliente.
+### Ejecutar en orden: crea su propio producto de prueba (owner) y su propio
+### cliente de prueba, y reutiliza tokens/ids automaticamente.
 
-### 1. Agregar item al carrito -> 200 OK
-POST {{host}}/api/cart/items
+@host = http://localhost:3000
+@clienteEmail = cart.test@example.com
+@clientePassword = prueba123
+
+### 1. Login owner -> 200 OK
+# @name loginOwner
+POST {{host}}/api/auth/login
 Content-Type: application/json
-Authorization: Bearer {{token}}
 
 {
-  "product_id": "<product_id>",
+  "email": "admin@tiendabox.com",
+  "password": "admin123"
+}
+
+### 2. Crear categoria de prueba (owner) -> 201 Created
+# @name createCategory
+POST {{host}}/api/category
+Content-Type: application/json
+Authorization: Bearer {{loginOwner.response.body.$.token}}
+
+{
+  "name": "Cart Test Category {{$timestamp}}"
+}
+
+### 3. Crear marca de prueba (owner) -> 201 Created
+# @name createBrand
+POST {{host}}/api/brand
+Content-Type: application/json
+Authorization: Bearer {{loginOwner.response.body.$.token}}
+
+{
+  "name": "Cart Test Brand {{$timestamp}}"
+}
+
+### 4. Crear producto de prueba con stock (owner) -> 201 Created
+# @name createProduct
+POST {{host}}/api/product
+Content-Type: application/json
+Authorization: Bearer {{loginOwner.response.body.$.token}}
+
+{
+  "name": "Producto para carrito",
+  "type": "stock",
+  "price": 100,
+  "stock": 5,
+  "category_id": "{{createCategory.response.body.$.id}}",
+  "brand_id": "{{createBrand.response.body.$.id}}"
+}
+
+### 5. Registrar cliente de prueba -> 201 Created
+# Si ya existe de una corrida anterior, devuelve 409 (no afecta el caso 6).
+POST {{host}}/api/auth/register
+Content-Type: application/json
+
+{
+  "name": "Cart Test Cliente",
+  "email": "{{clienteEmail}}",
+  "password": "{{clientePassword}}"
+}
+
+### 6. Login cliente de prueba -> 200 OK
+# @name loginCliente
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{clienteEmail}}",
+  "password": "{{clientePassword}}"
+}
+
+### 7. Agregar item al carrito -> 200 OK
+POST {{host}}/api/cart/items
+Content-Type: application/json
+Authorization: Bearer {{loginCliente.response.body.$.token}}
+
+{
+  "product_id": "{{createProduct.response.body.$.id}}",
   "quantity": 2
 }
 
-### 2. Ver carrito -> 200 OK
+### 8. Ver carrito -> 200 OK
 GET {{host}}/api/cart
-Authorization: Bearer {{token}}
+Authorization: Bearer {{loginCliente.response.body.$.token}}
 
-### 3. Agregar otro item -> 200 OK
+### 9. Agregar el mismo item de nuevo, suma cantidades -> 200 OK
 POST {{host}}/api/cart/items
 Content-Type: application/json
-Authorization: Bearer {{token}}
+Authorization: Bearer {{loginCliente.response.body.$.token}}
 
 {
-  "product_id": "<product_id_2>",
+  "product_id": "{{createProduct.response.body.$.id}}",
   "quantity": 1
 }
 
-### 4. Quitar item del carrito -> 200 OK
-DELETE {{host}}/api/cart/items/<product_id>
-Authorization: Bearer {{token}}
-
-### 5. Vaciar carrito -> 204 No Content
-DELETE {{host}}/api/cart
-Authorization: Bearer {{token}}
-
-### --- Casos de error ---
-
-### 6. Acceder sin token -> 401 No autenticado
-GET {{host}}/api/cart
-
-### 7. Agregar producto inexistente -> 400 Producto no disponible
+### 10. Agregar producto inexistente -> 400 Bad Request ("Producto no disponible")
 POST {{host}}/api/cart/items
 Content-Type: application/json
-Authorization: Bearer {{token}}
+Authorization: Bearer {{loginCliente.response.body.$.token}}
 
 {
   "product_id": "00000000-0000-0000-0000-000000000000",
   "quantity": 1
 }
 
-### 8. Agregar con cantidad inválida -> 400
+### 11. Agregar con cantidad invalida -> 400 Bad Request
 POST {{host}}/api/cart/items
 Content-Type: application/json
-Authorization: Bearer {{token}}
+Authorization: Bearer {{loginCliente.response.body.$.token}}
 
 {
-  "product_id": "<product_id>",
+  "product_id": "{{createProduct.response.body.$.id}}",
   "quantity": 0
 }
+
+### 12. Agregar mas cantidad de la disponible en stock -> 400 Bad Request
+POST {{host}}/api/cart/items
+Content-Type: application/json
+Authorization: Bearer {{loginCliente.response.body.$.token}}
+
+{
+  "product_id": "{{createProduct.response.body.$.id}}",
+  "quantity": 999
+}
+
+### 13. Quitar item del carrito -> 200 OK
+DELETE {{host}}/api/cart/items/{{createProduct.response.body.$.id}}
+Authorization: Bearer {{loginCliente.response.body.$.token}}
+
+### 14. Vaciar carrito -> 204 No Content
+DELETE {{host}}/api/cart
+Authorization: Bearer {{loginCliente.response.body.$.token}}
+
+### 15. Acceder sin token -> 401 No autenticado
+GET {{host}}/api/cart
+
+### 16. Acceder como owner, no cliente -> 403 No autorizado
+GET {{host}}/api/cart
+Authorization: Bearer {{loginOwner.response.body.$.token}}
