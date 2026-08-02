@@ -16,6 +16,45 @@ Una tienda de productos electrónicos opera de forma manual: los pedidos se reci
 
 ---
 
+## Cómo levantarlo
+
+### Requisitos previos
+
+- **Node.js** ≥ 22, < 23
+- **Docker** y **Docker Compose**
+
+### Pasos
+
+```bash
+# 1. Clonar el repositorio
+git clone https://github.com/tomasvallejos1/tiendabox.git
+cd tiendabox
+
+# 2. Copiar las variables de entorno
+cp .env.example .env
+
+# 3. Levantar las bases de datos con Docker
+docker compose up -d
+```
+
+Esto levanta:
+- **MongoDB** en el puerto `27018` (contenedor `tiendabox-mongodb`)
+- **PostgreSQL** en el puerto `5432` (contenedor `tiendabox-postgres`)
+
+```bash
+# 4. Instalar dependencias
+npm install
+
+# 5. Arrancar en modo desarrollo
+npm run dev
+```
+
+La API queda disponible en:
+- **API:** http://localhost:3000
+- **Documentación Swagger:** http://localhost:3000/api-docs
+
+---
+
 ## Funcionalidades
 
 ### Público (sin autenticación)
@@ -102,45 +141,6 @@ src/
 ├── order/                 # Pedidos con máquina de estados (PostgreSQL)
 └── session/               # Sesiones de autenticación (PostgreSQL)
 ```
-
----
-
-## Cómo levantarlo
-
-### Requisitos previos
-
-- **Node.js** ≥ 22, < 23
-- **Docker** y **Docker Compose**
-
-### Pasos
-
-```bash
-# 1. Clonar el repositorio
-git clone https://github.com/tomasvallejos1/tiendabox.git
-cd tiendabox
-
-# 2. Copiar las variables de entorno
-cp .env.example .env
-
-# 3. Levantar las bases de datos con Docker
-docker compose up -d
-```
-
-Esto levanta:
-- **MongoDB** en el puerto `27018` (contenedor `tiendabox-mongodb`)
-- **PostgreSQL** en el puerto `5432` (contenedor `tiendabox-postgres`)
-
-```bash
-# 4. Instalar dependencias
-npm install
-
-# 5. Arrancar en modo desarrollo
-npm run dev
-```
-
-La API queda disponible en:
-- **API:** http://localhost:3000
-- **Documentación Swagger:** http://localhost:3000/api-docs
 
 ---
 
@@ -270,7 +270,7 @@ Documentación interactiva disponible en http://localhost:3000/api-docs con todo
 
 ### Archivos `.http` (VS Code REST Client)
 
-En `tests/http/` hay un archivo por recurso para probar cada endpoint directamente desde VS Code:
+En `tests/http/` hay un archivo por recurso para probar cada endpoint directamente desde VS Code. **Requiere la extensión [REST Client](https://marketplace.visualstudio.com/items?itemName=humao.rest-client)** — si no la tenés instalada, usá Swagger UI en su lugar.
 
 ```
 tests/http/
