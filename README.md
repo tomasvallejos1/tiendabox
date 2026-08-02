@@ -53,7 +53,30 @@ La API queda disponible en:
 - **API:** http://localhost:3000
 - **Documentación Swagger:** http://localhost:3000/api-docs
 
+- También se puede probar con los test http
+
 ---
+## Cómo probar
+
+### Swagger UI
+
+Documentación interactiva disponible en http://localhost:3000/api-docs con todos los endpoints, schemas y ejemplos.
+
+### Archivos `.http` (VS Code REST Client)
+
+En `tests/http/` hay un archivo por recurso para probar cada endpoint directamente desde VS Code. **Requiere la extensión [REST Client](https://marketplace.visualstudio.com/items?itemName=humao.rest-client)** — si no la tenés instalada, usá Swagger UI en su lugar.
+
+```
+tests/http/
+├── auth.http
+├── brand.http
+├── cart.http
+├── category.http
+├── customer.http
+├── order.http
+├── product.http
+└── user.http
+```
 
 ## Funcionalidades
 
@@ -261,28 +284,6 @@ El script `init.sql` inserta automáticamente un usuario con rol `owner` para po
 | `test`            | `npm test`           | Ejecuta los tests unitarios con Vitest          |
 
 ---
-
-## Cómo probar
-
-### Swagger UI
-
-Documentación interactiva disponible en http://localhost:3000/api-docs con todos los endpoints, schemas y ejemplos.
-
-### Archivos `.http` (VS Code REST Client)
-
-En `tests/http/` hay un archivo por recurso para probar cada endpoint directamente desde VS Code. **Requiere la extensión [REST Client](https://marketplace.visualstudio.com/items?itemName=humao.rest-client)** — si no la tenés instalada, usá Swagger UI en su lugar.
-
-```
-tests/http/
-├── auth.http
-├── brand.http
-├── cart.http
-├── category.http
-├── customer.http
-├── order.http
-├── product.http
-└── user.http
-```
 
 ### Colección de Bruno
 
