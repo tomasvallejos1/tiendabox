@@ -37,16 +37,16 @@ const openApiSpec = {
     },
     schemas: {
       // ── Entidades ────────────────────────────────────────────────────────
+      // La API nunca devuelve el password, por eso no figura en el schema.
       User: {
         type: "object" as const,
         properties: {
           id: { type: "string" as const },
           email: { type: "string" as const, format: "email" },
-          password: { type: "string" as const },
           role: { type: "string" as const, enum: ["cliente", "owner"] },
           created_at: { type: "string" as const, format: "date-time" },
         },
-        required: ["id", "email", "password", "role", "created_at"],
+        required: ["id", "email", "role", "created_at"],
       },
       Customer: {
         type: "object" as const,
@@ -339,8 +339,10 @@ const openApiSpec = {
     "/api/users": {
       get: {
         tags: ["Users"],
-        summary: "Listar todos los usuarios",
-        description: "Devuelve todos los usuarios registrados. Ruta sin guards de autenticación.",
+        summary: "Listar todos los usuarios — Solo owner",
+        description:
+          "Requiere autenticación y rol owner. Nunca devuelve el password de los usuarios.",
+        security: [{ bearerAuth: [] }],
         responses: {
           "200": {
             description: "Lista de usuarios",
@@ -349,6 +351,14 @@ const openApiSpec = {
                 schema: { type: "array" as const, items: { $ref: "#/components/schemas/User" } },
               },
             },
+          },
+          "401": {
+            description: "No autenticado",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+          },
+          "403": {
+            description: "No autorizado",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
           },
           "500": {
             description: "Error interno del servidor",
@@ -361,8 +371,9 @@ const openApiSpec = {
     "/api/user/{id}": {
       get: {
         tags: ["Users"],
-        summary: "Obtener un usuario por ID",
-        description: "Ruta sin guards de autenticación.",
+        summary: "Obtener un usuario por ID — Solo owner",
+        description: "Requiere autenticación y rol owner. Nunca devuelve el password.",
+        security: [{ bearerAuth: [] }],
         parameters: [
           { name: "id", in: "path" as const, required: true, schema: { type: "string" as const } },
         ],
@@ -370,6 +381,14 @@ const openApiSpec = {
           "200": {
             description: "Usuario encontrado",
             content: { "application/json": { schema: { $ref: "#/components/schemas/User" } } },
+          },
+          "401": {
+            description: "No autenticado",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+          },
+          "403": {
+            description: "No autorizado",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
           },
           "404": {
             description: "Usuario no encontrado",
@@ -383,8 +402,9 @@ const openApiSpec = {
       },
       put: {
         tags: ["Users"],
-        summary: "Actualizar un usuario por ID",
-        description: "Ruta sin guards de autenticación.",
+        summary: "Actualizar un usuario por ID — Solo owner",
+        description: "Requiere autenticación y rol owner. Nunca devuelve el password.",
+        security: [{ bearerAuth: [] }],
         parameters: [
           { name: "id", in: "path" as const, required: true, schema: { type: "string" as const } },
         ],
@@ -412,6 +432,14 @@ const openApiSpec = {
             description: "Datos inválidos",
             content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
           },
+          "401": {
+            description: "No autenticado",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+          },
+          "403": {
+            description: "No autorizado",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+          },
           "404": {
             description: "Usuario no encontrado",
             content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
@@ -428,13 +456,22 @@ const openApiSpec = {
       },
       delete: {
         tags: ["Users"],
-        summary: "Eliminar un usuario por ID",
-        description: "Ruta sin guards de autenticación.",
+        summary: "Eliminar un usuario por ID — Solo owner",
+        description: "Requiere autenticación y rol owner.",
+        security: [{ bearerAuth: [] }],
         parameters: [
           { name: "id", in: "path" as const, required: true, schema: { type: "string" as const } },
         ],
         responses: {
           "204": { description: "Usuario eliminado (sin body)" },
+          "401": {
+            description: "No autenticado",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+          },
+          "403": {
+            description: "No autorizado",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+          },
           "404": {
             description: "Usuario no encontrado",
             content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
@@ -450,8 +487,10 @@ const openApiSpec = {
     "/api/user": {
       post: {
         tags: ["Users"],
-        summary: "Crear un usuario",
-        description: "Ruta sin guards de autenticación.",
+        summary: "Crear un usuario — Solo owner",
+        description:
+          "Requiere autenticación y rol owner. El alta pública de clientes va por /api/auth/register. Nunca devuelve el password.",
+        security: [{ bearerAuth: [] }],
         requestBody: {
           required: true,
           content: {
@@ -475,6 +514,14 @@ const openApiSpec = {
           },
           "400": {
             description: "Datos inválidos",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+          },
+          "401": {
+            description: "No autenticado",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+          },
+          "403": {
+            description: "No autorizado",
             content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
           },
           "409": {
@@ -527,8 +574,9 @@ const openApiSpec = {
     "/api/customer/{id}": {
       get: {
         tags: ["Customers"],
-        summary: "Obtener un cliente por ID — Cualquier usuario autenticado",
-        description: "Requiere autenticación (cualquier rol).",
+        summary: "Obtener un cliente por ID — Owner o el propio cliente",
+        description:
+          "Requiere autenticación. El owner puede ver cualquier cliente; el resto solo el propio.",
         security: [{ bearerAuth: [] }],
         parameters: [
           { name: "id", in: "path" as const, required: true, schema: { type: "string" as const } },
@@ -540,6 +588,10 @@ const openApiSpec = {
           },
           "401": {
             description: "No autenticado",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+          },
+          "403": {
+            description: "No tiene permiso para ver este cliente",
             content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
           },
           "404": {

@@ -6,3 +6,6 @@ export interface User {
   role: string; // "cliente" | "owner"
   created_at: string;
 }
+
+// Vista de User apta para salir por HTTP: nunca incluye el password.
+export type PublicUser = Omit<User, "password">;

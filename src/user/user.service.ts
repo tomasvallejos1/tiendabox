@@ -1,4 +1,4 @@
-import { User } from "./user.entity";
+import { PublicUser, User } from "./user.entity";
 import { IUserRepository } from "./user.repository.interface";
 import { ConflictError, ValidationError } from "../errors";
 
@@ -9,26 +9,29 @@ const VALID_ROLES = ["cliente", "owner"];
 export class UserService {
   constructor(private readonly repository: IUserRepository) {}
 
-  async getAll(): Promise<User[]> {
-    return this.repository.getAll();
+  async getAll(): Promise<PublicUser[]> {
+    const users = await this.repository.getAll();
+    return users.map((user) => this.toPublic(user));
   }
 
-  async getById(id: string): Promise<User | null> {
-    return this.repository.getById(id);
+  async getById(id: string): Promise<PublicUser | null> {
+    const user = await this.repository.getById(id);
+    return user ? this.toPublic(user) : null;
   }
 
-  async create(input: { email?: unknown; password?: unknown; role?: unknown }): Promise<User> {
+  async create(input: { email?: unknown; password?: unknown; role?: unknown }): Promise<PublicUser> {
     const email = this.validateEmail(input.email);
     const password = this.validatePassword(input.password);
     const role = this.normalizeRole(input.role);
     await this.ensureEmailIsUnique(email);
-    return this.repository.create({ email, password, role });
+    const user = await this.repository.create({ email, password, role });
+    return this.toPublic(user);
   }
 
   async update(
     id: string,
     input: { email?: unknown; password?: unknown; role?: unknown },
-  ): Promise<User | null> {
+  ): Promise<PublicUser | null> {
     const data: Partial<Omit<User, "id" | "created_at">> = {};
 
     if (input.email !== undefined) {
@@ -49,11 +52,22 @@ export class UserService {
       await this.ensureEmailIsUnique(data.email, id);
     }
 
-    return this.repository.update(id, data);
+    const user = await this.repository.update(id, data);
+    return user ? this.toPublic(user) : null;
   }
 
   async delete(id: string): Promise<boolean> {
     return this.repository.delete(id);
+  }
+
+  // Unico punto por donde User sale del service: descarta el password.
+  private toPublic(user: User): PublicUser {
+    return {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      created_at: user.created_at,
+    };
   }
 
   // Rechaza emails ya usados por otro usuario (case-insensitive).

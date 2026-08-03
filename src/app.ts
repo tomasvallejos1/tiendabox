@@ -84,7 +84,7 @@ export class App {
 
     const userService = new UserService(userRepository);
     const userController = new UserController(userService);
-    this.app.use("/api", createUserRoutes(userController));
+    this.app.use("/api", createUserRoutes(userController, catalogGuards));
 
     const authService = new AuthService(userRepository, customerRepository, sessionRepository);
     const authController = new AuthController(authService);

@@ -19,7 +19,16 @@ export class CustomerService {
     return this.repository.getAll();
   }
 
-  async getById(id: string): Promise<Customer | null> {
+  // Misma regla de pertenencia que update: el owner ve cualquier cliente,
+  // el resto solo el propio.
+  async getById(id: string, userId: string, role: string): Promise<Customer | null> {
+    if (role !== "owner") {
+      const own = await this.repository.getByUserId(userId);
+      if (!own || own.id !== id) {
+        throw new ForbiddenError("No tiene permiso para ver este cliente");
+      }
+    }
+
     return this.repository.getById(id);
   }
 
