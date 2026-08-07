@@ -1702,7 +1702,8 @@ const openApiSpec = {
         summary: "Cancelar un pedido propio si está pendiente — Solo cliente",
         description:
           "Requiere autenticación y rol cliente. " +
-          "Solo se puede cancelar un pedido propio que esté en estado 'pendiente'.",
+          "Solo se puede cancelar un pedido propio que esté en estado 'pendiente'. " +
+          "Intentar cancelar el pedido de otro cliente devuelve 403.",
         security: [{ bearerAuth: [] }],
         parameters: [
           { name: "id", in: "path" as const, required: true, schema: { type: "string" as const } },
@@ -1713,7 +1714,7 @@ const openApiSpec = {
             content: { "application/json": { schema: { $ref: "#/components/schemas/Order" } } },
           },
           "400": {
-            description: "No se puede cancelar (no está pendiente o es de otro cliente)",
+            description: "No se puede cancelar (el pedido no está pendiente)",
             content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
           },
           "401": {
@@ -1721,7 +1722,7 @@ const openApiSpec = {
             content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
           },
           "403": {
-            description: "No autorizado (requiere rol cliente)",
+            description: "No autorizado (requiere rol cliente, o el pedido es de otro cliente)",
             content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
           },
           "404": {

@@ -80,7 +80,19 @@ export class OrderService {
       throw new ValidationError("El pedido debe tener al menos un item");
     }
 
-    // 4. Validar cada item contra el producto.
+    // 3.b. Consolidar cantidades por product_id antes de validar.
+    // Si el mismo producto viene repetido, se valida y descuenta una sola vez por
+    // el total acumulado; validar item por item dejaba pasar pedidos que superaban
+    // el stock disponible y lo dejaban en negativo.
+    const merged = new Map<string, number>();
+    for (const raw of rawItems) {
+      if (!Number.isInteger(raw.quantity) || raw.quantity <= 0) {
+        throw new ValidationError("La cantidad de cada item debe ser un entero mayor a 0");
+      }
+      merged.set(raw.product_id, (merged.get(raw.product_id) ?? 0) + raw.quantity);
+    }
+
+    // 4. Validar cada item consolidado contra el producto.
     const orderItems: {
       product_id: string;
       product_name: string;
@@ -91,19 +103,15 @@ export class OrderService {
 
     let total = 0;
 
-    for (const raw of rawItems) {
-      const product = await this.productRepository.getById(raw.product_id);
+    for (const [productId, quantity] of merged) {
+      const product = await this.productRepository.getById(productId);
 
       if (!product || !product.is_active) {
-        throw new ValidationError(`Producto no disponible: ${raw.product_id}`);
-      }
-
-      if (!Number.isInteger(raw.quantity) || raw.quantity <= 0) {
-        throw new ValidationError("La cantidad de cada item debe ser un entero mayor a 0");
+        throw new ValidationError(`Producto no disponible: ${productId}`);
       }
 
       if (product.type === "stock") {
-        if (raw.quantity > product.stock) {
+        if (quantity > product.stock) {
           throw new ValidationError(
             `Stock insuficiente para '${product.name}'. Disponible: ${product.stock}`,
           );
@@ -112,33 +120,41 @@ export class OrderService {
           product_id: product.id,
           product_name: product.name,
           unit_price: product.price,
-          quantity: raw.quantity,
+          quantity,
           type: product.type,
         });
-        total += (product.price ?? 0) * raw.quantity;
+        total += (product.price ?? 0) * quantity;
       } else {
         // Producto tipo "encargo": unit_price null.
         orderItems.push({
           product_id: product.id,
           product_name: product.name,
           unit_price: null,
-          quantity: raw.quantity,
+          quantity,
           type: product.type,
         });
       }
     }
 
-    // 5. Descontar stock de productos tipo stock.
-    // deuda técnica: no transaccional (Postgres orders + Mongo products).
+    // 5. Descontar stock de productos tipo stock con la operacion atomica del repo.
+    // La validacion del paso 4 es solo para dar un mensaje de error util: la
+    // condicion real de stock la aplica decrementStock en la misma escritura, asi
+    // dos pedidos simultaneos no pueden llevarse la misma unidad.
+    // deuda técnica: no transaccional (Postgres orders + Mongo products); si un
+    // descuento falla a mitad de camino, se revierte a mano lo ya descontado.
+    const descontados: { product_id: string; quantity: number }[] = [];
+
     for (const item of orderItems) {
-      if (item.type === "stock") {
-        const product = await this.productRepository.getById(item.product_id);
-        if (product) {
-          await this.productRepository.update(product.id, {
-            stock: product.stock - item.quantity,
-          });
+      if (item.type !== "stock") continue;
+
+      const ok = await this.productRepository.decrementStock(item.product_id, item.quantity);
+      if (!ok) {
+        for (const hecho of descontados) {
+          await this.productRepository.incrementStock(hecho.product_id, hecho.quantity);
         }
+        throw new ValidationError(`Stock insuficiente para '${item.product_name}'`);
       }
+      descontados.push({ product_id: item.product_id, quantity: item.quantity });
     }
 
     // 6-7. Crear la orden con status "pendiente".
@@ -218,9 +234,10 @@ export class OrderService {
     const order = await this.orderRepository.getById(orderId);
     if (!order) return null;
 
-    // Verificar que la orden pertenezca al customer.
+    // Verificar que la orden pertenezca al customer. Es un problema de permisos,
+    // no de validacion: mismo criterio que getById, el controller lo mapea a 403.
     if (order.customer_id !== customerId) {
-      throw new ValidationError("No puede cancelar un pedido de otro cliente");
+      throw new ForbiddenError("No puede cancelar un pedido de otro cliente");
     }
 
     // Solo se puede cancelar si está pendiente.
@@ -234,12 +251,7 @@ export class OrderService {
     // el stock al menos quede corregido.
     for (const item of order.items) {
       if (item.type === "stock") {
-        const product = await this.productRepository.getById(item.product_id);
-        if (product) {
-          await this.productRepository.update(product.id, {
-            stock: product.stock + item.quantity,
-          });
-        }
+        await this.productRepository.incrementStock(item.product_id, item.quantity);
       }
     }
 

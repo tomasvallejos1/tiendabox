@@ -139,7 +139,7 @@ El proyecto usa dos motores de base de datos de forma simultánea, con un criter
 
 Los IDs son UUID generados en la aplicación con `crypto.randomUUID()`, de forma que ambos motores usan el mismo formato de identificador (string de 36 caracteres).
 
-Al arrancar, la aplicación ejecuta automáticamente `src/db/sql/init.sql`, que crea las tablas de PostgreSQL con `CREATE TABLE IF NOT EXISTS` y precarga un usuario owner.
+Al arrancar, la aplicación ejecuta automáticamente `src/db/sql/init.sql`, que crea las tablas de PostgreSQL con `CREATE TABLE IF NOT EXISTS` y precarga un usuario owner. Al final del script hay un bloque de migraciones idempotentes (`CREATE UNIQUE INDEX IF NOT EXISTS`, `ALTER COLUMN`) que aplica sobre bases ya existentes los constraints que los `CREATE TABLE` solo aplicarían en una base nueva.
 
 ---
 
@@ -150,12 +150,12 @@ src/
 ├── app.ts                 # Composición principal: Express, inyección de dependencias, montaje de rutas
 ├── init.ts                # Punto de entrada (crea App y llama a start)
 ├── config.ts              # Lectura de variables de entorno con valores por defecto
-├── errors.ts              # Errores de dominio: ValidationError (400), ConflictError (409)
+├── errors.ts              # Errores de dominio: ValidationError (400), ForbiddenError (403), ConflictError (409)
 ├── docs/                  # Especificación OpenAPI 3.0 para Swagger UI
-├── middlewares/           # authenticate (token de sesión) y authorize (por rol)
+├── middlewares/           # authenticate (token de sesión), authorize (por rol) y error-handler (404 + errores)
 ├── db/                    # DatabaseProviderFactory y script SQL de inicialización
 ├── auth/                  # Registro, login, logout
-├── user/                  # CRUD de usuarios (sin guards)
+├── user/                  # CRUD de usuarios (backoffice: auth + owner)
 ├── customer/              # Perfil de cliente (CUIT, condición fiscal, dirección)
 ├── category/              # Categorías del catálogo (MongoDB)
 ├── brand/                 # Marcas del catálogo (MongoDB)
@@ -204,11 +204,11 @@ El script `init.sql` inserta automáticamente un usuario con rol `owner` para po
 
 | Método | Ruta              | Descripción                 | Permiso  |
 |--------|-------------------|-----------------------------|----------|
-| GET    | `/api/users`      | Listar todos los usuarios   | Sin guards |
-| GET    | `/api/user/:id`   | Obtener usuario por ID      | Sin guards |
-| POST   | `/api/user`       | Crear un usuario            | Sin guards |
-| PUT    | `/api/user/:id`   | Actualizar un usuario       | Sin guards |
-| DELETE | `/api/user/:id`   | Eliminar un usuario         | Sin guards |
+| GET    | `/api/users`      | Listar todos los usuarios   | Owner    |
+| GET    | `/api/user/:id`   | Obtener usuario por ID      | Owner    |
+| POST   | `/api/user`       | Crear un usuario            | Owner    |
+| PUT    | `/api/user/:id`   | Actualizar un usuario       | Owner    |
+| DELETE | `/api/user/:id`   | Eliminar un usuario         | Owner    |
 
 ### Customers
 
@@ -216,7 +216,7 @@ El script `init.sql` inserta automáticamente un usuario con rol `owner` para po
 |--------|-----------------------|------------------------------|-----------------|
 | GET    | `/api/customers`      | Listar todos los clientes    | Owner           |
 | GET    | `/api/customer/:id`   | Obtener cliente por ID       | Autenticado     |
-| POST   | `/api/customer`       | Crear un cliente             | Sin guards      |
+| POST   | `/api/customer`       | Crear un cliente             | Owner           |
 | PUT    | `/api/customer/:id`   | Actualizar un cliente        | Autenticado     |
 | DELETE | `/api/customer/:id`   | Eliminar un cliente          | Owner           |
 
@@ -268,7 +268,7 @@ El script `init.sql` inserta automáticamente un usuario con rol `owner` para po
 | GET    | `/api/orders`              | Listar todos los pedidos (filtro: `status`)       | Owner       |
 | GET    | `/api/order/:id`           | Obtener un pedido por ID                          | Autenticado |
 | PUT    | `/api/order/:id/status`    | Avanzar el estado del pedido (un paso)            | Owner       |
-| PUT    | `/api/order/:id/cancel`    | Cancelar un pedido propio si está pendiente       | Cliente     |
+| PUT    | `/api/order/:id/cancel`    | Cancelar un pedido propio si está pendiente (repone el stock; 403 si el pedido es de otro cliente) | Cliente     |
 
 ---
 
@@ -277,7 +277,7 @@ El script `init.sql` inserta automáticamente un usuario con rol `owner` para po
 | Script            | Comando              | Descripción                                    |
 |-------------------|----------------------|-------------------------------------------------|
 | `dev`             | `npm run dev`        | Inicia el servidor con nodemon + ts-node        |
-| `build`           | `npm run build`      | Compila TypeScript a JavaScript (`dist/`)       |
+| `build`           | `npm run build`      | Compila TypeScript a `dist/` y copia `src/db/sql` (que `tsc` no toca) |
 | `start`           | `npm start`          | Ejecuta la build compilada (`dist/init.js`)     |
 | `format`          | `npm run format`     | Formatea el código con Prettier                 |
 | `lint`            | `npm run lint`       | Ejecuta ESLint sobre `src/`                     |
@@ -285,9 +285,9 @@ El script `init.sql` inserta automáticamente un usuario con rol `owner` para po
 
 ---
 
-### Colección de Bruno
+### Requests de ejemplo
 
-En `tests/bruno/tiendabox-api/` hay una colección para el cliente [Bruno](https://www.usebruno.com/) con requests organizados por recurso.
+En `tests/http/` hay archivos `.http` con requests organizados por recurso, para ejecutar desde el cliente REST de VS Code o similar.
 
 ### Tests unitarios
 
@@ -295,7 +295,12 @@ En `tests/bruno/tiendabox-api/` hay una colección para el cliente [Bruno](https
 npm test
 ```
 
-Ejecuta los tests unitarios con Vitest. Actualmente cubre los filtros del servicio de productos (`ProductService.getAll`) con un repositorio fake en memoria.
+Ejecuta los tests unitarios con Vitest, contra repositorios fake en memoria (sin base de datos). Cobertura actual:
+
+- `ProductService.getAll`: filtros por categoría y marca, y exclusión de productos inactivos.
+- `OrderService`: consolidación de items duplicados, validación de stock y de `delivery_address`, vaciado del carrito, máquina de estados, cancelación con reposición de stock y control de pertenencia del pedido.
+
+> Correr `npm test` con una carpeta `dist/` presente falla: Vitest también levanta los tests compilados en `dist/`, que no puede importar. Borrá `dist/` antes de testear (`rm -rf dist`).
 
 ---
 
@@ -305,8 +310,9 @@ Ejecuta los tests unitarios con Vitest. Actualmente cubre los filtros del servic
 |------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **Contraseñas en texto plano**                       | Decisión de simplicidad acordada con la cátedra. Pendiente de refactor con hash (bcrypt o similar).                                                      |
 | **Token opaco en base en lugar de JWT**              | Menos dependencias, misma funcionalidad para el alcance del TP. El token se guarda en la tabla `sessions` con expiración de 24 hs.                       |
-| **Descuento de stock no transaccional**              | Al crear un pedido se descuenta stock de productos en MongoDB y se crea la orden en PostgreSQL. Al ser motores distintos, no hay transacción atómica.     |
-| **Reposición de stock al cancelar: pendiente**       | Al cancelar un pedido no se repone el stock descontado. Marcado como TODO en el código.                                                                  |
+| **Descuento de stock no transaccional**              | Al crear un pedido se descuenta stock de productos en MongoDB y se crea la orden en PostgreSQL. Al ser motores distintos, no hay transacción atómica. El descuento por producto sí es atómico (`$inc` condicional en `decrementStock`), y si falla a mitad del pedido se revierte con `incrementStock` lo ya descontado. |
+| **Reposición de stock al cancelar: implementada**    | Al cancelar un pedido pendiente se repone el stock de los items de tipo `stock` con `incrementStock`, antes de marcar la orden como cancelada.            |
+| **Errores async sin `next(error)` en los controllers** | Cada controller atrapa sus errores con un `handleError` privado. El middleware global (`src/middlewares/error-handler.ts`) queda como red de seguridad; migrar los 7 controllers a `next(error)` es un refactor pendiente. |
 | **Congelamiento de nombre y precio en order_items**   | Los items del pedido guardan `product_name` y `unit_price` al momento de la compra, de forma que un cambio de precio posterior no altere pedidos pasados. |
 | **Soft-delete de productos**                         | Los productos no se eliminan físicamente; se marcan con `is_active: false` y se excluyen de las consultas del catálogo.                                  |
 
