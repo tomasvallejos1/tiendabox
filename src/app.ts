@@ -24,6 +24,7 @@ import { AuthController } from "./auth/auth.controller";
 import { createAuthRoutes } from "./auth/auth.routes";
 import { authenticate } from "./middlewares/authenticate";
 import { authorize } from "./middlewares/authorize";
+import { errorHandler, notFoundHandler } from "./middlewares/error-handler";
 import { CartService } from "./cart/cart.service";
 import { CartController } from "./cart/cart.controller";
 import { createCartRoutes } from "./cart/cart.routes";
@@ -50,6 +51,12 @@ export class App {
     this.app.use(express.json());
     this.app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(openApiSpec));
     await this.registerRoutes();
+
+    // Van al final, despues de las rutas y de Swagger: el 404 solo debe disparar
+    // cuando nada anterior matcheo, y el manejador de errores tiene que ser el
+    // ultimo de la cadena.
+    this.app.use(notFoundHandler);
+    this.app.use(errorHandler);
 
     this.app.listen(this.config.port, () => {
       console.log(`TiendaBox escuchando en http://localhost:${this.config.port}`);

@@ -6,7 +6,6 @@ dotenv.config();
 // Configuracion de la aplicacion leida desde el entorno
 export interface AppConfig {
   port: number;
-  dbEngine: "mongodb" | "postgres";
   mongo: {
     uri: string;
     db: string;
@@ -24,7 +23,6 @@ export interface AppConfig {
 export function loadConfig(): AppConfig {
   return {
     port: Number(process.env.PORT ?? 3000),
-    dbEngine: (process.env.DB_ENGINE ?? "mongodb") as "mongodb" | "postgres",
     mongo: {
       uri: process.env.MONGO_URI ?? "mongodb://localhost:27017",
       db: process.env.MONGO_DB ?? "tiendabox_mg",

@@ -73,6 +73,22 @@ export class ProductRepositoryMongoDB implements IProductRepository {
     return result.modifiedCount === 1;
   }
 
+  // Descuento atomico: la condicion de stock viaja en el filtro, de modo que dos
+  // pedidos simultaneos no pueden pisarse (a diferencia del leer-restar-escribir).
+  async decrementStock(id: string, quantity: number): Promise<boolean> {
+    const result = await this.collection.updateOne(
+      { _id: id, is_active: true, stock: { $gte: quantity } },
+      { $inc: { stock: -quantity } },
+    );
+    return result.modifiedCount === 1;
+  }
+
+  // Reposicion atomica. Sin condicion de is_active: un producto dado de baja
+  // despues de la compra igual tiene que recuperar su stock al cancelar.
+  async incrementStock(id: string, quantity: number): Promise<void> {
+    await this.collection.updateOne({ _id: id }, { $inc: { stock: quantity } });
+  }
+
   private toEntity(doc: ProductDoc): Product {
     return {
       id: doc._id,

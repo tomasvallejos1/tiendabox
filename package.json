@@ -6,7 +6,7 @@
   "main": "dist/init.js",
   "scripts": {
     "dev": "nodemon --exec ts-node src/init.ts",
-    "build": "tsc",
+    "build": "tsc && node -e \"require('fs').cpSync('src/db/sql','dist/db/sql',{recursive:true})\"",
     "start": "node dist/init.js",
     "format": "prettier --write src",
     "lint": "eslint src",

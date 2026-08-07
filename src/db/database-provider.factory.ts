@@ -21,7 +21,8 @@ import { IOrderRepository } from "../order/order.repository.interface";
 import { OrderRepositoryPostgres } from "../order/order.repository.postgres";
 
 // Centraliza la creacion de repositorios y las conexiones a las bases.
-// Preparado para sumar PostgreSQL mas adelante.
+// Los dos motores se usan siempre y en simultaneo: MongoDB para el catalogo y
+// PostgreSQL para usuarios, carritos y pedidos. No hay motor "activo" a elegir.
 export class DatabaseProviderFactory {
   private readonly mongoClient: MongoClient;
   private mongoDb: Db | null = null;
@@ -31,7 +32,7 @@ export class DatabaseProviderFactory {
     this.mongoClient = new MongoClient(this.config.mongo.uri);
   }
 
-  // Abre las conexiones necesarias segun el motor configurado.
+  // Abre las conexiones a ambas bases y aplica el esquema de PostgreSQL.
   async connect(): Promise<void> {
     await this.mongoClient.connect();
     this.mongoDb = this.mongoClient.db(this.config.mongo.db);

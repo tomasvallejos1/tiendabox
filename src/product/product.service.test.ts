@@ -34,6 +34,14 @@ class FakeProductRepository implements IProductRepository {
   async softDelete(): Promise<boolean> {
     throw new Error("no usado en estos tests");
   }
+
+  async decrementStock(): Promise<boolean> {
+    throw new Error("no usado en estos tests");
+  }
+
+  async incrementStock(): Promise<void> {
+    throw new Error("no usado en estos tests");
+  }
 }
 
 // Los repos de category y brand no se usan en getAll; basta con stubs vacios.

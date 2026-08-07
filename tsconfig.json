@@ -27,5 +27,9 @@
     "strict": true,
     "isolatedModules": true,
     "skipLibCheck": true
-  }
+  },
+
+  // Solo src/: sin esto tsc tambien toma vitest.config.ts, que esta fuera de rootDir.
+  // Los .test.ts viven en src/, asi que siguen typecheckeados.
+  "include": ["src"]
 }
