@@ -1,4 +1,5 @@
 import express, { Express } from "express";
+import cors from "cors";
 import swaggerUi from "swagger-ui-express";
 import "./middlewares/auth.types";
 import openApiSpec from "./docs/openapi";
@@ -48,6 +49,15 @@ export class App {
   async start(): Promise<void> {
     await this.factory.connect();
 
+    // CORS goes first so preflight OPTIONS requests are answered before
+    // body parsing, Swagger and the API routes.
+    this.app.use(
+      cors({
+        origin: this.config.corsOrigin,
+        methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allowedHeaders: ["Content-Type", "Authorization"],
+      }),
+    );
     this.app.use(express.json());
     this.app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(openApiSpec));
     await this.registerRoutes();
