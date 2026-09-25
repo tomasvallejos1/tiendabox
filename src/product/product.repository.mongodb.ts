@@ -46,6 +46,16 @@ export class ProductRepositoryMongoDB implements IProductRepository {
     return doc ? this.toEntity(doc) : null;
   }
 
+  // Unlike getById, this does NOT filter by is_active: the cart needs to see
+  // discontinued products to flag them as unavailable.
+  async getByIds(ids: string[]): Promise<Product[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+    const docs = await this.collection.find({ _id: { $in: ids } }).toArray();
+    return docs.map((doc) => this.toEntity(doc));
+  }
+
   // getAll arma el query dinamicamente: siempre is_active:true, y suma filtros si vienen.
   async getAll(filter?: ProductFilter): Promise<Product[]> {
     const query: Filter<ProductDoc> = { is_active: true };

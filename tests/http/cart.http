@@ -74,6 +74,8 @@ Content-Type: application/json
 }
 
 ### 7. Agregar item al carrito -> 200 OK
+# Devuelve el carrito enriquecido: items con name, type, unit_price, subtotal, etc.,
+# mas item_count, total, has_encargo_items y has_unavailable_items.
 POST {{host}}/api/cart/items
 Content-Type: application/json
 Authorization: Bearer {{loginCliente.response.body.$.token}}
@@ -84,6 +86,7 @@ Authorization: Bearer {{loginCliente.response.body.$.token}}
 }
 
 ### 8. Ver carrito -> 200 OK
+# Mismo formato enriquecido: total = 2 x 100 = 200, item_count = 2.
 GET {{host}}/api/cart
 Authorization: Bearer {{loginCliente.response.body.$.token}}
 
@@ -128,6 +131,7 @@ Authorization: Bearer {{loginCliente.response.body.$.token}}
 }
 
 ### 13. Quitar item del carrito -> 200 OK
+# Devuelve el carrito enriquecido sin el item (items vacio, total 0).
 DELETE {{host}}/api/cart/items/{{createProduct.response.body.$.id}}
 Authorization: Bearer {{loginCliente.response.body.$.token}}
 

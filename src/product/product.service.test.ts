@@ -18,6 +18,10 @@ class FakeProductRepository implements IProductRepository {
     throw new Error("no usado en estos tests");
   }
 
+  async getByIds(): Promise<Product[]> {
+    throw new Error("no usado en estos tests");
+  }
+
   async getAll(filter?: ProductFilter): Promise<Product[]> {
     return this.products.filter((product) => {
       if (!product.is_active) return false;

@@ -119,24 +119,91 @@ const openApiSpec = {
           },
         ],
       },
-      CartItem: {
+      CartItemDetail: {
         type: "object" as const,
         properties: {
           id: { type: "string" as const },
           product_id: { type: "string" as const },
           quantity: { type: "integer" as const },
+          name: {
+            type: "string" as const,
+            nullable: true,
+            description: "null si el producto ya no existe",
+          },
+          type: {
+            type: "string" as const,
+            enum: ["stock", "encargo"],
+            nullable: true,
+            description: "null si el producto ya no existe",
+          },
+          unit_price: {
+            type: "number" as const,
+            nullable: true,
+            description: "null si es por encargo o no está disponible",
+          },
+          stock_available: {
+            type: "integer" as const,
+            nullable: true,
+            description: "null si es por encargo o no está disponible",
+          },
+          subtotal: {
+            type: "number" as const,
+            nullable: true,
+            description: "unit_price * quantity; null si no aplica",
+          },
+          available: {
+            type: "boolean" as const,
+            description: "false si el producto fue dado de baja o no existe",
+          },
+          exceeds_stock: {
+            type: "boolean" as const,
+            description: "true si es tipo stock y la cantidad supera el stock actual",
+          },
         },
-        required: ["id", "product_id", "quantity"],
+        required: [
+          "id",
+          "product_id",
+          "quantity",
+          "name",
+          "type",
+          "unit_price",
+          "stock_available",
+          "subtotal",
+          "available",
+          "exceeds_stock",
+        ],
       },
-      Cart: {
+      CartDetail: {
         type: "object" as const,
         properties: {
           id: { type: "string" as const },
           customer_id: { type: "string" as const },
-          items: { type: "array" as const, items: { $ref: "#/components/schemas/CartItem" } },
           updated_at: { type: "string" as const, format: "date-time" },
+          items: {
+            type: "array" as const,
+            items: { $ref: "#/components/schemas/CartItemDetail" },
+          },
+          item_count: {
+            type: "integer" as const,
+            description: "Suma de las cantidades de todos los items",
+          },
+          total: {
+            type: "number" as const,
+            description: "Suma de los subtotales de los items disponibles tipo stock",
+          },
+          has_encargo_items: { type: "boolean" as const },
+          has_unavailable_items: { type: "boolean" as const },
         },
-        required: ["id", "customer_id", "items", "updated_at"],
+        required: [
+          "id",
+          "customer_id",
+          "updated_at",
+          "items",
+          "item_count",
+          "total",
+          "has_encargo_items",
+          "has_unavailable_items",
+        ],
       },
       OrderItem: {
         type: "object" as const,
@@ -1320,7 +1387,9 @@ const openApiSpec = {
         responses: {
           "200": {
             description: "Carrito del cliente",
-            content: { "application/json": { schema: { $ref: "#/components/schemas/Cart" } } },
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/CartDetail" } },
+            },
           },
           "400": {
             description: "Error de validación",
@@ -1390,7 +1459,9 @@ const openApiSpec = {
         responses: {
           "200": {
             description: "Carrito actualizado con el nuevo item",
-            content: { "application/json": { schema: { $ref: "#/components/schemas/Cart" } } },
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/CartDetail" } },
+            },
           },
           "400": {
             description: "Datos inválidos o stock insuficiente",
@@ -1431,7 +1502,9 @@ const openApiSpec = {
         responses: {
           "200": {
             description: "Carrito actualizado sin el item eliminado",
-            content: { "application/json": { schema: { $ref: "#/components/schemas/Cart" } } },
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/CartDetail" } },
+            },
           },
           "400": {
             description: "Error de validación",

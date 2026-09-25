@@ -27,6 +27,13 @@ class FakeProductRepository implements IProductRepository {
     return product && product.is_active ? { ...product } : null;
   }
 
+  // Mirrors the Mongo repo: returns inactive products too.
+  async getByIds(ids: string[]): Promise<Product[]> {
+    return [...this.products.values()]
+      .filter((product) => ids.includes(product.id))
+      .map((product) => ({ ...product }));
+  }
+
   async getAll(): Promise<Product[]> {
     return [...this.products.values()].filter((product) => product.is_active);
   }

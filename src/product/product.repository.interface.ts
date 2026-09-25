@@ -9,6 +9,9 @@ export interface ProductFilter {
 export interface IProductRepository {
   create(data: Omit<Product, "id">): Promise<Product>;
   getById(id: string): Promise<Product | null>;
+  // Fetches the products with the given ids in a single query, INCLUDING inactive ones.
+  // Used by the cart to detect discontinued products.
+  getByIds(ids: string[]): Promise<Product[]>;
   getAll(filter?: ProductFilter): Promise<Product[]>;
   update(id: string, data: Partial<Omit<Product, "id">>): Promise<Product | null>;
   // Soft delete: inactiva el producto en lugar de borrarlo fisicamente
