@@ -4,7 +4,8 @@ import { CustomerController } from "./customer.controller";
 // Define los endpoints de Customer y los asocia al controlador.
 // GET /customers: solo owner. GET /customer/:id: cualquier logueado.
 // PUT /customer/:id: cualquier logueado (el service valida pertenencia).
-// POST /customer: solo owner (el registro de clientes va por /api/auth/register).
+// POST /customer: solo owner. Crea clientes de local y, si viene email, tambien su
+// cuenta web (el registro propio del cliente va por /api/auth/register).
 // DELETE /customer/:id: solo owner.
 // guards es obligatorio a proposito: omitirlo es un error de compilacion, no una
 // API abierta en silencio.

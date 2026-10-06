@@ -100,7 +100,7 @@ export class CustomerRepositoryPostgres implements ICustomerRepository {
   // Mapea la fila de PostgreSQL a la entidad Customer.
   private toEntity(row: {
     id: string;
-    user_id: string;
+    user_id: string | null;
     name: string;
     government_id: string | null;
     tax_status: string;

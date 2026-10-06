@@ -52,7 +52,11 @@ const openApiSpec = {
         type: "object" as const,
         properties: {
           id: { type: "string" as const },
-          user_id: { type: "string" as const },
+          user_id: {
+            type: "string" as const,
+            nullable: true,
+            description: "null para los clientes de local (sin cuenta web)",
+          },
           name: { type: "string" as const },
           government_id: {
             type: "string" as const,
@@ -67,7 +71,22 @@ const openApiSpec = {
           address: { type: "string" as const, nullable: true },
           created_at: { type: "string" as const, format: "date-time" },
         },
-        required: ["id", "user_id", "name", "tax_status", "created_at"],
+        required: ["id", "name", "tax_status", "created_at"],
+      },
+      CustomerWithEmail: {
+        allOf: [
+          { $ref: "#/components/schemas/Customer" },
+          {
+            type: "object" as const,
+            properties: {
+              email: {
+                type: "string" as const,
+                nullable: true,
+                description: "Email de la cuenta web; null si el cliente no tiene cuenta",
+              },
+            },
+          },
+        ],
       },
       Category: {
         type: "object" as const,
@@ -614,7 +633,9 @@ const openApiSpec = {
       get: {
         tags: ["Customers"],
         summary: "Listar todos los clientes — Solo owner",
-        description: "Requiere autenticación y rol owner.",
+        description:
+          "Requiere autenticación y rol owner. Cada cliente incluye el email de su cuenta web, " +
+          "o null si es un cliente de local.",
         security: [{ bearerAuth: [] }],
         responses: {
           "200": {
@@ -623,7 +644,7 @@ const openApiSpec = {
               "application/json": {
                 schema: {
                   type: "array" as const,
-                  items: { $ref: "#/components/schemas/Customer" },
+                  items: { $ref: "#/components/schemas/CustomerWithEmail" },
                 },
               },
             },
@@ -766,9 +787,13 @@ const openApiSpec = {
     "/api/customer": {
       post: {
         tags: ["Customers"],
-        summary: "Crear un cliente",
+        summary: "Crear un cliente — Solo owner",
         description:
-          "Crea un perfil de cliente. Ruta sin guards (se usa internamente en el registro).",
+          "Requiere autenticación y rol owner. " +
+          "Sin email crea un cliente de local (user_id null). " +
+          "Con email crea además su cuenta web con rol 'cliente'; si no se envía password, " +
+          "el sistema genera una de 10 caracteres y la devuelve en generated_password.",
+        security: [{ bearerAuth: [] }],
         requestBody: {
           required: true,
           content: {
@@ -776,7 +801,6 @@ const openApiSpec = {
               schema: {
                 type: "object" as const,
                 properties: {
-                  user_id: { type: "string" as const },
                   name: { type: "string" as const },
                   government_id: { type: "string" as const, nullable: true },
                   tax_status: {
@@ -785,8 +809,22 @@ const openApiSpec = {
                   },
                   phone: { type: "string" as const, nullable: true },
                   address: { type: "string" as const, nullable: true },
+                  email: {
+                    type: "string" as const,
+                    description: "Opcional. Si viene, se crea también la cuenta web",
+                  },
+                  password: {
+                    type: "string" as const,
+                    description:
+                      "Opcional, mínimo 6 caracteres. Solo con email; si falta, se genera",
+                  },
+                  user_id: {
+                    type: "string" as const,
+                    description:
+                      "Opcional. Vincula el cliente a un usuario ya existente; no se combina con email",
+                  },
                 },
-                required: ["user_id", "name"],
+                required: ["name"],
               },
             },
           },
@@ -794,10 +832,38 @@ const openApiSpec = {
         responses: {
           "201": {
             description: "Cliente creado",
-            content: { "application/json": { schema: { $ref: "#/components/schemas/Customer" } } },
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object" as const,
+                  properties: {
+                    customer: { $ref: "#/components/schemas/Customer" },
+                    generated_password: {
+                      type: "string" as const,
+                      nullable: true,
+                      description:
+                        "Contraseña generada por el sistema; null si la envió el dueño o no hay cuenta",
+                    },
+                  },
+                  required: ["customer", "generated_password"],
+                },
+              },
+            },
           },
           "400": {
             description: "Datos inválidos",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+          },
+          "401": {
+            description: "No autenticado",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+          },
+          "403": {
+            description: "No autorizado (requiere rol owner)",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+          },
+          "409": {
+            description: "Ya existe una cuenta con ese email",
             content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
           },
           "500": {

@@ -27,6 +27,19 @@ export class UserRepositoryPostgres implements IUserRepository {
     return result.rows[0] ? this.toEntity(result.rows[0]) : null;
   }
 
+  // Una sola consulta para todo el lote.
+  async getByIds(ids: string[]): Promise<User[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+    const result = await this.pool.query(
+      `SELECT id, email, password, role, created_at::text AS created_at
+       FROM users WHERE id = ANY($1)`,
+      [ids],
+    );
+    return result.rows.map((row) => this.toEntity(row));
+  }
+
   async getByEmail(email: string): Promise<User | null> {
     const result = await this.pool.query(
       `SELECT id, email, password, role, created_at::text AS created_at

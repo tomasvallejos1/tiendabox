@@ -17,7 +17,9 @@ ON CONFLICT (email) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS customers (
   id            VARCHAR(36) PRIMARY KEY,
-  user_id       VARCHAR(36) UNIQUE NOT NULL REFERENCES users(id),
+  -- NULL para los clientes de local (sin cuenta web). UNIQUE admite multiples NULL,
+  -- asi que el vinculo usuario-cliente sigue siendo uno a uno.
+  user_id       VARCHAR(36) UNIQUE REFERENCES users(id),
   name          VARCHAR(150) NOT NULL,
   government_id VARCHAR(20),
   tax_status    VARCHAR(30) NOT NULL DEFAULT 'consumidor_final',
@@ -83,3 +85,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS cart_items_cart_product_uidx
 -- zona horaria el string se interpretaba como hora local del proceso, corriendo la
 -- expiracion cuando el TZ del proceso no coincidia con el de la base.
 ALTER TABLE sessions ALTER COLUMN expires_at TYPE TIMESTAMPTZ;
+
+-- El cliente de local no tiene cuenta web: user_id pasa a ser opcional. Si la columna
+-- ya es nullable, DROP NOT NULL no hace nada.
+ALTER TABLE customers ALTER COLUMN user_id DROP NOT NULL;

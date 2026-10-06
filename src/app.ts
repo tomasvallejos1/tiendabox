@@ -95,7 +95,7 @@ export class App {
     this.app.use("/api", createBrandRoutes(brandController, catalogGuards));
 
     const customerRepository = this.factory.createCustomerRepository();
-    const customerService = new CustomerService(customerRepository);
+    const customerService = new CustomerService(customerRepository, userRepository);
     const customerController = new CustomerController(customerService);
     this.app.use("/api", createCustomerRoutes(customerController, catalogGuards));
 
