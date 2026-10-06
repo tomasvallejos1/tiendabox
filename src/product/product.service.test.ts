@@ -10,8 +10,8 @@ import { IBrandRepository } from "../brand/brand.repository.interface";
 class FakeProductRepository implements IProductRepository {
   constructor(private readonly products: Product[]) {}
 
-  async create(): Promise<Product> {
-    throw new Error("no usado en estos tests");
+  async create(data: Omit<Product, "id">): Promise<Product> {
+    return { id: "nuevo", ...data };
   }
 
   async getById(): Promise<Product | null> {
@@ -57,6 +57,7 @@ function buildProduct(overrides: Partial<Product> & Pick<Product, "id">): Produc
   return {
     name: "Producto",
     description: null,
+    image_url: null,
     type: "stock",
     price: 100,
     stock: 10,
@@ -118,5 +119,50 @@ describe("ProductService.getAll (filtros)", () => {
     const conFiltro = await service.getAll({ category_id: "cat-1", brand_id: "brand-1" });
     expect(conFiltro.map((p) => p.id)).toEqual(["1"]);
     expect(conFiltro.some((p) => p.id === "5")).toBe(false);
+  });
+});
+
+describe("ProductService.create (image_url)", () => {
+  let service: ProductService;
+
+  // Body minimo valido; cada test le suma su image_url.
+  const baseInput = {
+    name: "Macbook Pro 14",
+    type: "stock",
+    price: 100,
+    stock: 10,
+    category_id: "cat-1",
+    brand_id: "brand-1",
+  };
+
+  beforeEach(() => {
+    const repository = new FakeProductRepository([]);
+    service = new ProductService(repository, categoryRepositoryStub, brandRepositoryStub);
+  });
+
+  it("guarda la URL cuando empieza con http:// o https://", async () => {
+    const https = await service.create({ ...baseInput, image_url: "https://example.com/a.jpg" });
+    expect(https.image_url).toBe("https://example.com/a.jpg");
+
+    const http = await service.create({ ...baseInput, image_url: "http://example.com/a.jpg" });
+    expect(http.image_url).toBe("http://example.com/a.jpg");
+  });
+
+  it("queda en null si no viene", async () => {
+    const result = await service.create(baseInput);
+    expect(result.image_url).toBeNull();
+  });
+
+  it("normaliza el string vacio a null", async () => {
+    const result = await service.create({ ...baseInput, image_url: "" });
+    expect(result.image_url).toBeNull();
+  });
+
+  it("rechaza valores que no son un enlace http(s)", async () => {
+    const mensaje = "La URL de la imagen debe comenzar con http:// o https://";
+    await expect(service.create({ ...baseInput, image_url: "ftp://x/a.jpg" })).rejects.toThrow(
+      mensaje,
+    );
+    await expect(service.create({ ...baseInput, image_url: 123 })).rejects.toThrow(mensaje);
   });
 });

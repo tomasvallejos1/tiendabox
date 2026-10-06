@@ -131,6 +131,7 @@ function buildProduct(overrides: Partial<Product> & Pick<Product, "id">): Produc
   return {
     name: "Producto",
     description: null,
+    image_url: null,
     type: "stock",
     price: 100,
     stock: 10,

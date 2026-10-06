@@ -7,6 +7,7 @@ type ProductDoc = {
   _id: string;
   name: string;
   description?: string | null;
+  image_url?: string | null;
   type: ProductType;
   price?: number | null;
   stock?: number;
@@ -28,6 +29,7 @@ export class ProductRepositoryMongoDB implements IProductRepository {
       _id: newId,
       name: data.name,
       description: data.description,
+      image_url: data.image_url,
       type: data.type,
       price: data.price,
       stock: data.stock,
@@ -104,6 +106,8 @@ export class ProductRepositoryMongoDB implements IProductRepository {
       id: doc._id,
       name: doc.name,
       description: doc.description ?? null,
+      // Los productos cargados antes de este campo no lo tienen: se leen como null.
+      image_url: doc.image_url ?? null,
       type: doc.type,
       price: doc.price ?? null,
       stock: doc.stock ?? 0,

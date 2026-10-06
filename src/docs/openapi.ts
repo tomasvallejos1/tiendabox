@@ -93,6 +93,12 @@ const openApiSpec = {
           id: { type: "string" as const },
           name: { type: "string" as const },
           description: { type: "string" as const, nullable: true },
+          image_url: {
+            type: "string" as const,
+            nullable: true,
+            example: "https://example.com/img/macbook-pro-14.jpg",
+            description: "URL de la imagen; null si el producto no tiene",
+          },
           type: { type: "string" as const, enum: ["stock", "encargo"] },
           price: {
             type: "number" as const,
@@ -1246,6 +1252,13 @@ const openApiSpec = {
                 properties: {
                   name: { type: "string" as const },
                   description: { type: "string" as const, nullable: true },
+                  image_url: {
+                    type: "string" as const,
+                    nullable: true,
+                    example: "https://example.com/img/macbook-pro-14.jpg",
+                    description:
+                      "Opcional. Debe comenzar con http:// o https://. null o vacío quita la imagen",
+                  },
                   type: { type: "string" as const, enum: ["stock", "encargo"] },
                   price: { type: "number" as const, nullable: true },
                   stock: { type: "integer" as const },
@@ -1332,6 +1345,12 @@ const openApiSpec = {
                 properties: {
                   name: { type: "string" as const },
                   description: { type: "string" as const, nullable: true },
+                  image_url: {
+                    type: "string" as const,
+                    nullable: true,
+                    example: "https://example.com/img/macbook-pro-14.jpg",
+                    description: "Opcional. Debe comenzar con http:// o https://",
+                  },
                   type: { type: "string" as const, enum: ["stock", "encargo"] },
                   price: {
                     type: "number" as const,

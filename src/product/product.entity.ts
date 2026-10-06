@@ -5,6 +5,7 @@ export interface Product {
   id: string;
   name: string;
   description: string | null;
+  image_url: string | null;
   type: ProductType;
   price: number | null;
   stock: number;
