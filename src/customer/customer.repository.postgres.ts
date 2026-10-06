@@ -35,6 +35,18 @@ export class CustomerRepositoryPostgres implements ICustomerRepository {
     return result.rows[0] ? this.toEntity(result.rows[0]) : null;
   }
 
+  // Trae los clientes con esos ids en una sola consulta.
+  async getByIds(ids: string[]): Promise<Customer[]> {
+    if (ids.length === 0) return [];
+
+    const result = await this.pool.query(
+      `SELECT id, user_id, name, government_id, tax_status, phone, address, created_at::text AS created_at
+       FROM customers WHERE id = ANY($1)`,
+      [ids],
+    );
+    return result.rows.map((row) => this.toEntity(row));
+  }
+
   async getByUserId(userId: string): Promise<Customer | null> {
     const result = await this.pool.query(
       `SELECT id, user_id, name, government_id, tax_status, phone, address, created_at::text AS created_at

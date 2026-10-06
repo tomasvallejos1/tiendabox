@@ -171,6 +171,10 @@ class FakeCustomerRepository implements ICustomerRepository {
     return this.customers.find((customer) => customer.id === id) ?? null;
   }
 
+  async getByIds(ids: string[]): Promise<Customer[]> {
+    return this.customers.filter((customer) => ids.includes(customer.id));
+  }
+
   async getByUserId(userId: string): Promise<Customer | null> {
     return this.customers.find((customer) => customer.user_id === userId) ?? null;
   }

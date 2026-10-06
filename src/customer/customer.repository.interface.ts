@@ -3,6 +3,8 @@ import { Customer } from "./customer.entity";
 export interface ICustomerRepository {
   create(data: Omit<Customer, "id" | "created_at">): Promise<Customer>;
   getById(id: string): Promise<Customer | null>;
+  // Trae los clientes con esos ids en una sola consulta.
+  getByIds(ids: string[]): Promise<Customer[]>;
   getByUserId(userId: string): Promise<Customer | null>;
   getAll(): Promise<Customer[]>;
   update(

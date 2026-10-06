@@ -1,4 +1,4 @@
-import { Order, OrderStatus } from "./order.entity";
+import { Order, OrderStatus, OrderWithCustomer } from "./order.entity";
 import { IOrderRepository } from "./order.repository.interface";
 import { IProductRepository } from "../product/product.repository.interface";
 import { ICartRepository } from "../cart/cart.repository.interface";
@@ -33,6 +33,39 @@ export class OrderService {
     return customer.id;
   }
 
+  // Enriquece los pedidos con los datos de su cliente. Trae todos los clientes en una
+  // sola consulta con getByIds (nunca getById en loop). El email queda afuera a
+  // proposito: vive en users y sumaria ese repositorio al service.
+  private async withCustomers(orders: Order[]): Promise<OrderWithCustomer[]> {
+    const ids = [...new Set(orders.map((order) => order.customer_id))];
+    const customers = await this.customerRepository.getByIds(ids);
+    const customersById = new Map(customers.map((customer) => [customer.id, customer]));
+
+    return orders.map((order) => {
+      const customer = customersById.get(order.customer_id);
+      return {
+        ...order,
+        // null si el cliente fue eliminado.
+        customer: customer
+          ? {
+              id: customer.id,
+              name: customer.name,
+              phone: customer.phone,
+              address: customer.address,
+              government_id: customer.government_id,
+              tax_status: customer.tax_status,
+            }
+          : null,
+      };
+    });
+  }
+
+  // Variante de withCustomers para un unico pedido.
+  private async withCustomer(order: Order): Promise<OrderWithCustomer> {
+    const [enriched] = await this.withCustomers([order]);
+    return enriched!;
+  }
+
   async createOrder(
     userId: string,
     input: {
@@ -40,7 +73,7 @@ export class OrderService {
       delivery_address?: unknown;
       items?: { product_id: string; quantity: number }[];
     },
-  ): Promise<Order> {
+  ): Promise<OrderWithCustomer> {
     const customerId = await this.resolveCustomerId(userId);
 
     // 1. Validar delivery_type.
@@ -175,24 +208,24 @@ export class OrderService {
       }
     }
 
-    return order;
+    return this.withCustomer(order);
   }
 
-  async getMyOrders(userId: string): Promise<Order[]> {
+  async getMyOrders(userId: string): Promise<OrderWithCustomer[]> {
     const customerId = await this.resolveCustomerId(userId);
-    return this.orderRepository.getByCustomerId(customerId);
+    return this.withCustomers(await this.orderRepository.getByCustomerId(customerId));
   }
 
-  async getAllOrders(statusFilter?: string): Promise<Order[]> {
-    return this.orderRepository.getAll(statusFilter);
+  async getAllOrders(statusFilter?: string): Promise<OrderWithCustomer[]> {
+    return this.withCustomers(await this.orderRepository.getAll(statusFilter));
   }
 
-  async getById(orderId: string, userId: string, role: string): Promise<Order | null> {
+  async getById(orderId: string, userId: string, role: string): Promise<OrderWithCustomer | null> {
     const order = await this.orderRepository.getById(orderId);
     if (!order) return null;
 
     // El owner puede ver cualquier pedido.
-    if (role === "owner") return order;
+    if (role === "owner") return this.withCustomer(order);
 
     // Para otros roles, verificar que la orden pertenezca al cliente.
     const customerId = await this.resolveCustomerId(userId);
@@ -200,7 +233,7 @@ export class OrderService {
       throw new ForbiddenError("No tiene permiso para ver este pedido");
     }
 
-    return order;
+    return this.withCustomer(order);
   }
 
   // Avanza el estado de la orden un paso en el flujo lineal (owner).

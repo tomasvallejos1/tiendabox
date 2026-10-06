@@ -270,6 +270,42 @@ const openApiSpec = {
         },
         required: ["id", "customer_id", "status", "delivery_type", "total", "created_at", "items"],
       },
+      OrderCustomer: {
+        type: "object" as const,
+        description: "Datos del cliente que hizo el pedido. No incluye el email",
+        properties: {
+          id: { type: "string" as const },
+          name: { type: "string" as const },
+          phone: { type: "string" as const, nullable: true },
+          address: { type: "string" as const, nullable: true },
+          government_id: {
+            type: "string" as const,
+            nullable: true,
+            description: "CUIT/CUIL de 11 dígitos",
+          },
+          tax_status: {
+            type: "string" as const,
+            enum: ["consumidor_final", "responsable_inscripto", "monotributo", "exento"],
+          },
+        },
+        required: ["id", "name", "phone", "address", "government_id", "tax_status"],
+      },
+      OrderWithCustomer: {
+        allOf: [
+          { $ref: "#/components/schemas/Order" },
+          {
+            type: "object" as const,
+            properties: {
+              customer: {
+                allOf: [{ $ref: "#/components/schemas/OrderCustomer" }],
+                nullable: true,
+                description: "null si el cliente fue eliminado",
+              },
+            },
+            required: ["customer"],
+          },
+        ],
+      },
       Error: {
         type: "object" as const,
         properties: {
@@ -1656,7 +1692,9 @@ const openApiSpec = {
         responses: {
           "201": {
             description: "Pedido creado",
-            content: { "application/json": { schema: { $ref: "#/components/schemas/Order" } } },
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/OrderWithCustomer" } },
+            },
           },
           "400": {
             description: "Datos inválidos o stock insuficiente",
@@ -1690,7 +1728,10 @@ const openApiSpec = {
             description: "Lista de pedidos del cliente",
             content: {
               "application/json": {
-                schema: { type: "array" as const, items: { $ref: "#/components/schemas/Order" } },
+                schema: {
+                  type: "array" as const,
+                  items: { $ref: "#/components/schemas/OrderWithCustomer" },
+                },
               },
             },
           },
@@ -1745,7 +1786,10 @@ const openApiSpec = {
             description: "Lista de pedidos",
             content: {
               "application/json": {
-                schema: { type: "array" as const, items: { $ref: "#/components/schemas/Order" } },
+                schema: {
+                  type: "array" as const,
+                  items: { $ref: "#/components/schemas/OrderWithCustomer" },
+                },
               },
             },
           },
@@ -1777,7 +1821,9 @@ const openApiSpec = {
         responses: {
           "200": {
             description: "Pedido encontrado",
-            content: { "application/json": { schema: { $ref: "#/components/schemas/Order" } } },
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/OrderWithCustomer" } },
+            },
           },
           "401": {
             description: "No autenticado",

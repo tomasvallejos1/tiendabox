@@ -29,6 +29,10 @@ class FakeCustomerRepository implements ICustomerRepository {
     throw new Error("no usado en estos tests");
   }
 
+  async getByIds(): Promise<Customer[]> {
+    throw new Error("no usado en estos tests");
+  }
+
   async getByUserId(): Promise<Customer | null> {
     throw new Error("no usado en estos tests");
   }
