@@ -1651,10 +1651,13 @@ const openApiSpec = {
     "/api/order": {
       post: {
         tags: ["Orders"],
-        summary: "Crear un pedido — Solo cliente",
+        summary: "Crear un pedido — Cliente u owner",
         description:
-          "Requiere autenticación y rol cliente. " +
-          "Los items pueden venir en el body o tomarse automáticamente del carrito del cliente. " +
+          "Requiere autenticación (cliente u owner). " +
+          "El cliente crea el pedido a su nombre: los items pueden venir en el body o tomarse " +
+          "automáticamente de su carrito. " +
+          "El owner lo crea a nombre de un cliente: customer_id e items son obligatorios y no se " +
+          "toca el carrito de ese cliente. " +
           "delivery_type debe ser 'retiro' o 'envio' (si es envio, delivery_address es obligatorio). " +
           "Se descuenta el stock de los productos tipo 'stock' y si los items vinieron del carrito, se vacía.",
         security: [{ bearerAuth: [] }],
@@ -1665,6 +1668,12 @@ const openApiSpec = {
               schema: {
                 type: "object" as const,
                 properties: {
+                  customer_id: {
+                    type: "string" as const,
+                    description:
+                      "Cliente a nombre de quien se crea el pedido. Obligatorio para el owner; " +
+                      "ignorado para el cliente (siempre se usa su propio perfil)",
+                  },
                   delivery_type: { type: "string" as const, enum: ["retiro", "envio"] },
                   delivery_address: {
                     type: "string" as const,
@@ -1673,7 +1682,9 @@ const openApiSpec = {
                   },
                   items: {
                     type: "array" as const,
-                    description: "Opcional. Si no se envía, se toman los items del carrito.",
+                    description:
+                      "Opcional para el cliente (si no se envía, se toman los items del carrito). " +
+                      "Obligatorio para el owner.",
                     items: {
                       type: "object" as const,
                       properties: {
@@ -1697,15 +1708,13 @@ const openApiSpec = {
             },
           },
           "400": {
-            description: "Datos inválidos o stock insuficiente",
+            description:
+              "Datos inválidos o stock insuficiente. Para el owner: falta customer_id, " +
+              "el cliente indicado no existe o faltan los items",
             content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
           },
           "401": {
             description: "No autenticado",
-            content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
-          },
-          "403": {
-            description: "No autorizado (requiere rol cliente)",
             content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
           },
           "500": {
@@ -1903,11 +1912,13 @@ const openApiSpec = {
     "/api/order/{id}/cancel": {
       put: {
         tags: ["Orders"],
-        summary: "Cancelar un pedido propio si está pendiente — Solo cliente",
+        summary: "Cancelar un pedido — Cliente (propio y pendiente) u owner",
         description:
-          "Requiere autenticación y rol cliente. " +
-          "Solo se puede cancelar un pedido propio que esté en estado 'pendiente'. " +
-          "Intentar cancelar el pedido de otro cliente devuelve 403.",
+          "Requiere autenticación (cliente u owner). " +
+          "El cliente solo puede cancelar un pedido propio que esté en estado 'pendiente'; " +
+          "intentar cancelar el pedido de otro cliente devuelve 403. " +
+          "El owner puede cancelar cualquier pedido que no esté 'entregado' ni 'cancelado'. " +
+          "En ambos casos se repone el stock de los productos tipo 'stock'.",
         security: [{ bearerAuth: [] }],
         parameters: [
           { name: "id", in: "path" as const, required: true, schema: { type: "string" as const } },
@@ -1918,7 +1929,9 @@ const openApiSpec = {
             content: { "application/json": { schema: { $ref: "#/components/schemas/Order" } } },
           },
           "400": {
-            description: "No se puede cancelar (el pedido no está pendiente)",
+            description:
+              "No se puede cancelar: para el cliente, el pedido no está pendiente; " +
+              "para el owner, ya está entregado o cancelado",
             content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
           },
           "401": {
@@ -1926,7 +1939,7 @@ const openApiSpec = {
             content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
           },
           "403": {
-            description: "No autorizado (requiere rol cliente, o el pedido es de otro cliente)",
+            description: "El pedido es de otro cliente",
             content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
           },
           "404": {
