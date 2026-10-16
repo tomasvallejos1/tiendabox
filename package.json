@@ -14,7 +14,14 @@
     "test:unit": "jest test/unit",
     "test:integration": "jest test/integration --runInBand",
     "test:watch": "jest test/unit --watch",
-    "test:coverage": "jest --coverage"
+    "test:coverage": "jest --coverage",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.ts": [
+      "eslint --fix",
+      "prettier --write"
+    ]
   },
   "repository": {
     "type": "git",
@@ -65,7 +72,9 @@
     "babel-jest": "^30.5.2",
     "eslint": "^10.5.0",
     "eslint-config-prettier": "^10.1.8",
+    "husky": "^9.1.7",
     "jest": "^30.5.2",
+    "lint-staged": "^17.6.0",
     "nodemon": "^3.1.14",
     "prettier": "^3.8.4",
     "testcontainers": "^12.2.1",

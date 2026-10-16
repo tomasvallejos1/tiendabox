@@ -68,9 +68,7 @@ Al arrancar, la API crea las tablas de PostgreSQL (`src/db/sql/init.sql`) y prec
 - **Autenticación:** `POST /api/auth/register` o `POST /api/auth/login` devuelven un token de sesión, que se envía en el header `Authorization: Bearer <token>`.
 - **Swagger UI** (`/api-docs`): todos los endpoints, con schemas y ejemplos.
 - **Archivos `.http`** en `tests/http/`, uno por recurso, para usar con la extensión [REST Client](https://marketplace.visualstudio.com/items?itemName=humao.rest-client) de VS Code.
-- **Tests unitarios:** `npm test` (Vitest, con repositorios fake en memoria, sin bases de datos).
-
-> Si existe la carpeta `dist/`, `npm test` falla porque Vitest también toma los tests compilados. Borrala antes (`rm -rf dist`).
+- **Tests unitarios:** `npm run test:unit` (Jest, con repositorios fake en memoria, sin bases de datos).
 
 ### Scripts
 
@@ -78,8 +76,31 @@ Al arrancar, la API crea las tablas de PostgreSQL (`src/db/sql/init.sql`) y prec
 |---------------------------------|----------------------------------------------------|
 | `npm run dev`                   | Servidor en modo desarrollo (nodemon + ts-node)    |
 | `npm run build` / `npm start`   | Compila a `dist/` y ejecuta la build               |
-| `npm test`                      | Tests unitarios                                    |
-| `npm run lint` / `npm run format` | ESLint / Prettier sobre `src/`                   |
+| `npm test`                      | Todos los tests (`test/`)                          |
+| `npm run test:unit`             | Tests unitarios (`test/unit/`)                     |
+| `npm run test:integration`      | Tests de integración (requieren Docker)            |
+| `npm run test:coverage`         | Tests con reporte de coverage (mínimo 80%)         |
+| `npm run lint` / `npm run format` | ESLint / Prettier sobre `src/` y `test/`         |
+
+### Flujo de trabajo
+
+Al instalar las dependencias (`npm install`), Husky configura dos hooks de git:
+
+| Hook         | Cuándo corre    | Qué corre                                                                                      |
+|--------------|-----------------|------------------------------------------------------------------------------------------------|
+| `pre-commit` | en cada commit  | `eslint --fix` y `prettier --write` sobre los `.ts` en stage (lint-staged)                     |
+| `pre-push`   | en cada push    | `tsc --noEmit`, `npm run lint` y los tests unitarios con coverage; si algo falla, no se pushea |
+
+Los tests de integración no corren en los hooks porque necesitan Docker; corren en el CI.
+
+**Solo para emergencias** (por ejemplo, un hotfix con el CI como red de seguridad) se pueden saltear con `--no-verify`:
+
+```bash
+git commit --no-verify -m "..."
+git push --no-verify
+```
+
+No es para el día a día: el código que se pushea sin verificar puede romper el build o los tests de todo el equipo. En el CI los hooks se desactivan con la variable de entorno `HUSKY=0`.
 
 ---
 

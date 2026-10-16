@@ -1,0 +1,10 @@
+# pre-commit: solo lo rapido, para que commitear siga siendo fluido.
+# lint-staged corre eslint --fix y prettier --write sobre los .ts en stage
+# (la configuracion esta en "lint-staged" dentro de package.json).
+# Lo lento (compilacion y tests) corre en el pre-push.
+
+# HUSKY=0 saltea el hook (GitHub Actions la setea). Husky ya lo chequea antes de
+# llegar aca; se repite para que valga tambien si el script se corre a mano.
+[ "${HUSKY-}" = "0" ] && exit 0
+
+npx lint-staged

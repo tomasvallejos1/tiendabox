@@ -1,0 +1,22 @@
+# pre-push: lo lento pero importante. Se corre antes de publicar y no en cada
+# commit, para que nadie termine usando --no-verify por lo que tarda.
+#
+# Los tests de integracion (npm run test:integration) NO corren aca: levantan
+# contenedores con testcontainers y dependen de tener Docker andando, que no todos
+# tienen. Esos corren en el CI.
+#
+# Husky ejecuta este archivo con "sh -e": el primer comando que falla aborta el push.
+
+# HUSKY=0 saltea el hook (GitHub Actions la setea). Husky ya lo chequea antes de
+# llegar aca; se repite para que valga tambien si el script se corre a mano.
+[ "${HUSKY-}" = "0" ] && exit 0
+
+echo "pre-push: verificando tipos (tsc --noEmit)..."
+npx tsc --noEmit
+
+echo "pre-push: corriendo el lint (npm run lint)..."
+npm run lint
+
+echo "pre-push: corriendo los tests unitarios con coverage (npm run test:coverage)..."
+# Se acota a test/unit: "jest --coverage" sin filtro tambien tomaria test/integration.
+npm run test:coverage -- test/unit
