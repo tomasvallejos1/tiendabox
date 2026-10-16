@@ -3,11 +3,25 @@ import { ICustomerRepository } from "../customer/customer.repository.interface";
 import { ISessionRepository } from "../session/session.repository.interface";
 import { ConflictError, ValidationError } from "../errors";
 
+// Repositorios que el alta usa dentro de una misma transaccion.
+export interface RegistrationRepositories {
+  users: IUserRepository;
+  customers: ICustomerRepository;
+}
+
+// Ejecuta work de forma atomica con repositorios atados a una transaccion: si work lanza,
+// no queda nada guardado. El service no sabe de que base se trata; la implementacion real
+// la arma DatabaseProviderFactory.
+export type RunInTransaction = <T>(
+  work: (repos: RegistrationRepositories) => Promise<T>,
+) => Promise<T>;
+
 export class AuthService {
   constructor(
     private readonly userRepo: IUserRepository,
     private readonly customerRepo: ICustomerRepository,
     private readonly sessionRepo: ISessionRepository,
+    private readonly runInTransaction: RunInTransaction,
   ) {}
 
   async register(input: { name?: unknown; email?: unknown; password?: unknown }) {
@@ -15,30 +29,39 @@ export class AuthService {
     const email = this.validateEmail(input.email);
     const password = this.validatePassword(input.password);
 
-    const existing = await this.userRepo.getByEmail(email);
-    if (existing) {
-      throw new ConflictError("Ya existe una cuenta con ese email");
-    }
+    // Usuario y cliente se crean juntos o ninguno: si el cliente falla, un usuario suelto
+    // dejaria tomado el email y una cuenta sin perfil que no puede comprar.
+    return this.runInTransaction(async ({ users, customers }) => {
+      const existing = await users.getByEmail(email);
+      if (existing) {
+        throw new ConflictError("Ya existe una cuenta con ese email");
+      }
 
-    const user = await this.userRepo.create({ email, password, role: "cliente" });
-    const customer = await this.customerRepo.create({
-      user_id: user.id,
-      name,
-      government_id: null,
-      tax_status: "consumidor_final",
-      phone: null,
-      address: null,
+      const user = await users.create({ email, password, role: "cliente" });
+      const customer = await customers.create({
+        user_id: user.id,
+        name,
+        government_id: null,
+        tax_status: "consumidor_final",
+        phone: null,
+        address: null,
+      });
+
+      return {
+        user: { id: user.id, email: user.email, role: user.role },
+        customer: { id: customer.id, name: customer.name },
+      };
     });
-
-    return {
-      user: { id: user.id, email: user.email, role: user.role },
-      customer: { id: customer.id, name: customer.name },
-    };
   }
 
   async login(input: { email?: unknown; password?: unknown }) {
     const email = this.validatePresence(input.email, "email");
-    const password = this.validatePresence(input.password, "password");
+    // El password nunca se recorta: los espacios son parte de la contraseña, y register
+    // lo guarda tal cual.
+    if (typeof input.password !== "string" || input.password.length === 0) {
+      throw new ValidationError("El campo 'password' es obligatorio");
+    }
+    const password = input.password;
 
     const user = await this.userRepo.getByEmail(email);
     if (!user || password !== user.password) {
@@ -76,6 +99,7 @@ export class AuthService {
     return value.trim();
   }
 
+  // Sin trim, igual que en login: se guarda exactamente lo que escribio el usuario.
   private validatePassword(value: unknown): string {
     if (typeof value !== "string" || value.length < 6) {
       throw new ValidationError("El campo 'password' debe tener al menos 6 caracteres");

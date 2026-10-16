@@ -1,4 +1,4 @@
-import { AuthService } from "../../src/auth/auth.service";
+import { AuthService, RunInTransaction } from "../../src/auth/auth.service";
 import { User } from "../../src/user/user.entity";
 import { IUserRepository } from "../../src/user/user.repository.interface";
 import { Customer } from "../../src/customer/customer.entity";
@@ -49,10 +49,15 @@ class FakeUserRepository implements IUserRepository {
   }
 }
 
+// failOnCreate simula una caida de la base justo al insertar el cliente.
 class FakeCustomerRepository implements ICustomerRepository {
   readonly customers: Customer[] = [];
+  failOnCreate = false;
 
   async create(data: Omit<Customer, "id" | "created_at">): Promise<Customer> {
+    if (this.failOnCreate) {
+      throw new Error("fallo simulado al crear el cliente");
+    }
     const customer: Customer = {
       id: `cus-${this.customers.length + 1}`,
       created_at: "2026-01-01 00:00:00",
@@ -109,6 +114,34 @@ class FakeSessionRepository implements ISessionRepository {
   }
 }
 
+// Transaccion en memoria: le pasa al trabajo COPIAS de los repos y solo vuelca los cambios
+// si termina bien, como un COMMIT. Si el service escribiera por fuera de la transaccion
+// (con los repos del constructor), los tests de atomicidad lo detectarian.
+class FakeTransaction {
+  calls = 0;
+  failCustomerCreate = false;
+
+  constructor(
+    private readonly users: FakeUserRepository,
+    private readonly customers: FakeCustomerRepository,
+  ) {}
+
+  readonly run: RunInTransaction = async (work) => {
+    this.calls++;
+    const txUsers = new FakeUserRepository();
+    txUsers.users.push(...this.users.users);
+    const txCustomers = new FakeCustomerRepository();
+    txCustomers.customers.push(...this.customers.customers);
+    txCustomers.failOnCreate = this.failCustomerCreate;
+
+    const result = await work({ users: txUsers, customers: txCustomers });
+
+    this.users.users.splice(0, this.users.users.length, ...txUsers.users);
+    this.customers.customers.splice(0, this.customers.customers.length, ...txCustomers.customers);
+    return result;
+  };
+}
+
 // Revisa el objeto COMPLETO, a cualquier profundidad: ni la clave "password" ni su valor
 // pueden aparecer en lo que el service devuelve (y el controller manda por HTTP).
 function expectNoPassword(value: unknown, password: string): void {
@@ -121,13 +154,20 @@ describe("AuthService", () => {
   let userRepository: FakeUserRepository;
   let customerRepository: FakeCustomerRepository;
   let sessionRepository: FakeSessionRepository;
+  let transaction: FakeTransaction;
   let service: AuthService;
 
   beforeEach(() => {
     userRepository = new FakeUserRepository();
     customerRepository = new FakeCustomerRepository();
     sessionRepository = new FakeSessionRepository();
-    service = new AuthService(userRepository, customerRepository, sessionRepository);
+    transaction = new FakeTransaction(userRepository, customerRepository);
+    service = new AuthService(
+      userRepository,
+      customerRepository,
+      sessionRepository,
+      transaction.run,
+    );
   });
 
   describe("register", () => {
@@ -210,6 +250,36 @@ describe("AuthService", () => {
 
       expect(userRepository.users[0]!.password).toBe("123456");
     });
+
+    // Los espacios son parte de la contraseña: recortarla cambiaria lo que el usuario eligio.
+    it("guarda el password tal cual, con los espacios de los extremos", async () => {
+      await service.register({ ...validRegistration, password: "  secreto123  " });
+
+      expect(userRepository.users[0]!.password).toBe("  secreto123  ");
+    });
+
+    it("crea usuario y cliente dentro de una sola transacción", async () => {
+      await service.register(validRegistration);
+
+      expect(transaction.calls).toBe(1);
+    });
+
+    // Regresion: el usuario se creaba aunque fallara el cliente, y quedaba una cuenta sin
+    // perfil con el email tomado.
+    it("si falla la creación del cliente no queda ningún usuario guardado", async () => {
+      transaction.failCustomerCreate = true;
+
+      await expect(service.register(validRegistration)).rejects.toThrow(
+        "fallo simulado al crear el cliente",
+      );
+      expect(userRepository.users).toHaveLength(0);
+      expect(customerRepository.customers).toHaveLength(0);
+
+      // El email no quedo tomado: el mismo registro funciona cuando la base se recupera.
+      transaction.failCustomerCreate = false;
+      await expect(service.register(validRegistration)).resolves.toBeDefined();
+      expect(userRepository.users).toHaveLength(1);
+    });
   });
 
   describe("login", () => {
@@ -244,9 +314,13 @@ describe("AuthService", () => {
     });
 
     it("el email no distingue mayúsculas", async () => {
+      // Se lee antes de llamar a login: si el argumento de toMatchObject lanzara, la promesa
+      // de login quedaria rechazada sin manejar y tiraria abajo todo el proceso de Jest.
+      const userId = userRepository.users[0]?.id;
+
       await expect(
         service.login({ email: "MARIA@Example.com", password: validRegistration.password }),
-      ).resolves.toMatchObject({ id: userRepository.users[0]!.id });
+      ).resolves.toMatchObject({ id: userId });
     });
 
     it("con password incorrecta lanza ValidationError y no crea sesión", async () => {
@@ -289,7 +363,7 @@ describe("AuthService", () => {
 
     it.each([
       ["email", { email: "" }],
-      ["password", { password: "   " }],
+      ["password", { password: "" }],
     ])("exige el campo %s", async (field, override) => {
       await expect(
         service.login({
@@ -298,6 +372,38 @@ describe("AuthService", () => {
           ...override,
         }),
       ).rejects.toThrow(new ValidationError(`El campo '${field}' es obligatorio`));
+    });
+  });
+
+  // Regresion: login recortaba el password y register no, asi que una contraseña con
+  // espacios en los extremos nunca podia entrar.
+  describe("login sin recortar el password", () => {
+    it("entra con un password que tiene espacios en los extremos", async () => {
+      await service.register({ ...validRegistration, password: "  secreto123  " });
+
+      await expect(
+        service.login({ email: validRegistration.email, password: "  secreto123  " }),
+      ).resolves.toMatchObject({ email: validRegistration.email });
+    });
+
+    it("rechaza el password con espacios de más", async () => {
+      await service.register(validRegistration);
+
+      await expect(
+        service.login({
+          email: validRegistration.email,
+          password: `${validRegistration.password} `,
+        }),
+      ).rejects.toThrow(new ValidationError("Credenciales inválidas"));
+    });
+
+    // Un password de solo espacios es un password (incorrecto), no un campo vacio.
+    it("trata un password de solo espacios como credencial inválida, no como campo vacío", async () => {
+      await service.register(validRegistration);
+
+      await expect(
+        service.login({ email: validRegistration.email, password: "   " }),
+      ).rejects.toThrow(new ValidationError("Credenciales inválidas"));
     });
   });
 

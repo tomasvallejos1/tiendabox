@@ -19,6 +19,21 @@ import { ICartRepository } from "../cart/cart.repository.interface";
 import { CartRepositoryPostgres } from "../cart/cart.repository.postgres";
 import { IOrderRepository } from "../order/order.repository.interface";
 import { OrderRepositoryPostgres } from "../order/order.repository.postgres";
+import type { RunInTransaction } from "../auth/auth.service";
+import { withTransaction } from "./transaction";
+
+// Transaccion del alta de cuentas: usuario y cliente viven en PostgreSQL, asi que se crean
+// sobre la misma conexion y se confirman juntos. Se exporta aparte de la factory para poder
+// probarla contra una base real sin pasar por loadConfig.
+export function createRegistrationTransaction(pool: Pool): RunInTransaction {
+  return (work) =>
+    withTransaction(pool, (client) =>
+      work({
+        users: new UserRepositoryPostgres(client),
+        customers: new CustomerRepositoryPostgres(client),
+      }),
+    );
+}
 
 // Centraliza la creacion de repositorios y las conexiones a las bases.
 // Los dos motores se usan siempre y en simultaneo: MongoDB para el catalogo y
@@ -80,6 +95,10 @@ export class DatabaseProviderFactory {
 
   createOrderRepository(): IOrderRepository {
     return new OrderRepositoryPostgres(this.getPgPool());
+  }
+
+  createRegistrationTransaction(): RunInTransaction {
+    return createRegistrationTransaction(this.getPgPool());
   }
 
   public getDb(): Db {
