@@ -74,8 +74,9 @@ export class CustomerService {
   }): Promise<CreateCustomerResult> {
     const user_id = this.normalizeUserId(input.user_id);
     const name = this.validateName(input.name);
-    const government_id = this.validateGovernmentId(input.government_id);
+    // tax_status va primero: el formato valido del documento depende de la condicion fiscal.
     const tax_status = this.validateTaxStatus(input.tax_status);
+    const government_id = this.validateGovernmentId(input.government_id, tax_status);
     const phone = this.normalizeOptionalString(input.phone);
     const address = this.normalizeOptionalString(input.address);
     const email = this.normalizeEmail(input.email);
@@ -129,9 +130,10 @@ export class CustomerService {
     role: string,
   ): Promise<Customer | null> {
     // Validar pertenencia: solo el owner puede editar cualquier cliente.
+    let current: Customer | null = null;
     if (role !== "owner") {
-      const own = await this.repository.getByUserId(userId);
-      if (!own || own.id !== id) {
+      current = await this.repository.getByUserId(userId);
+      if (!current || current.id !== id) {
         throw new ForbiddenError("No tiene permiso para modificar este cliente");
       }
     }
@@ -141,11 +143,27 @@ export class CustomerService {
     if (input.name !== undefined) {
       data.name = this.validateName(input.name);
     }
-    if (input.government_id !== undefined) {
-      data.government_id = this.validateGovernmentId(input.government_id);
-    }
-    if (input.tax_status !== undefined) {
-      data.tax_status = this.validateTaxStatus(input.tax_status);
+
+    // El documento se valida contra la condicion fiscal, asi que si llega solo uno de los
+    // dos campos, el otro se toma del cliente guardado. Cambiar solo tax_status tambien
+    // revalida el documento guardado: pasar a responsable_inscripto con un DNI cargado
+    // dejaria un dato que ya no cumple la regla.
+    const hasGovernmentId = input.government_id !== undefined;
+    const hasTaxStatus = input.tax_status !== undefined;
+    if (hasGovernmentId || hasTaxStatus) {
+      if (hasGovernmentId !== hasTaxStatus && current === null) {
+        current = await this.repository.getById(id);
+        if (!current) return null;
+      }
+      const tax_status = hasTaxStatus
+        ? this.validateTaxStatus(input.tax_status)
+        : current!.tax_status;
+      const government_id = this.validateGovernmentId(
+        hasGovernmentId ? input.government_id : current!.government_id,
+        tax_status,
+      );
+      if (hasTaxStatus) data.tax_status = tax_status;
+      if (hasGovernmentId) data.government_id = government_id;
     }
     if (input.phone !== undefined) {
       data.phone = this.normalizeOptionalString(input.phone);
@@ -221,18 +239,24 @@ export class CustomerService {
     return value.trim();
   }
 
-  // government_id: opcional; si viene, 11 digitos numericos (CUIT/CUIL). Vacio se trata como null.
-  private validateGovernmentId(value: unknown): string | null {
+  // government_id: opcional (vacio se trata como null). Si viene, el formato depende de la
+  // condicion fiscal: el consumidor final suele identificarse con DNI (7 u 8 digitos), aunque
+  // tambien puede tener CUIL (11); el resto factura con CUIT, que siempre tiene 11.
+  private validateGovernmentId(value: unknown, taxStatus: string): string | null {
     if (value === undefined || value === null) return null;
     if (typeof value !== "string") {
       throw new ValidationError("El campo 'government_id' debe ser un string");
     }
     const trimmed = value.trim();
     if (trimmed.length === 0) return null;
-    if (!/^\d{11}$/.test(trimmed)) {
-      throw new ValidationError(
-        "El campo 'government_id' debe contener 11 dígitos numéricos (CUIT/CUIL)",
-      );
+    if (taxStatus === "consumidor_final") {
+      if (!/^(\d{7,8}|\d{11})$/.test(trimmed)) {
+        throw new ValidationError(
+          "El documento debe ser un DNI de 7 u 8 dígitos o un CUIT/CUIL de 11",
+        );
+      }
+    } else if (!/^\d{11}$/.test(trimmed)) {
+      throw new ValidationError("El CUIT debe tener 11 dígitos numéricos");
     }
     return trimmed;
   }

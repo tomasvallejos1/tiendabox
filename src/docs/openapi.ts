@@ -61,7 +61,8 @@ const openApiSpec = {
           government_id: {
             type: "string" as const,
             nullable: true,
-            description: "CUIT/CUIL de 11 dígitos",
+            description:
+              "DNI (7 u 8 dígitos) o CUIT/CUIL (11 dígitos) según tax_status; null si no se cargó",
           },
           tax_status: {
             type: "string" as const,
@@ -281,7 +282,8 @@ const openApiSpec = {
           government_id: {
             type: "string" as const,
             nullable: true,
-            description: "CUIT/CUIL de 11 dígitos",
+            description:
+              "DNI (7 u 8 dígitos) o CUIT/CUIL (11 dígitos) según tax_status; null si no se cargó",
           },
           tax_status: {
             type: "string" as const,
@@ -754,7 +756,8 @@ const openApiSpec = {
                   government_id: {
                     type: "string" as const,
                     nullable: true,
-                    description: "CUIT/CUIL 11 dígitos, o null",
+                    description:
+                      "Opcional. Con tax_status consumidor_final: DNI de 7 u 8 dígitos o CUIT/CUIL de 11. Con el resto de las condiciones: CUIT de 11 dígitos. Solo números, sin puntos ni guiones. Si no se envía tax_status, se valida contra la condición fiscal guardada del cliente; vacío o null lo borra",
                   },
                   tax_status: {
                     type: "string" as const,
@@ -838,7 +841,12 @@ const openApiSpec = {
                 type: "object" as const,
                 properties: {
                   name: { type: "string" as const },
-                  government_id: { type: "string" as const, nullable: true },
+                  government_id: {
+                    type: "string" as const,
+                    nullable: true,
+                    description:
+                      "Opcional. Con tax_status consumidor_final: DNI de 7 u 8 dígitos o CUIT/CUIL de 11. Con el resto de las condiciones: CUIT de 11 dígitos. Solo números, sin puntos ni guiones. Si no se envía tax_status, se asume consumidor_final",
+                  },
                   tax_status: {
                     type: "string" as const,
                     enum: ["consumidor_final", "responsable_inscripto", "monotributo", "exento"],
