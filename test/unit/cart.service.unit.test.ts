@@ -1,12 +1,12 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { CartService } from "./cart.service";
-import { Cart } from "./cart.entity";
-import { ICartRepository } from "./cart.repository.interface";
-import { Product } from "../product/product.entity";
-import { IProductRepository } from "../product/product.repository.interface";
-import { Customer } from "../customer/customer.entity";
-import { ICustomerRepository } from "../customer/customer.repository.interface";
-import { ValidationError } from "../errors";
+import { CartService } from "../../src/cart/cart.service";
+import { Cart } from "../../src/cart/cart.entity";
+import { ICartRepository } from "../../src/cart/cart.repository.interface";
+import { Product } from "../../src/product/product.entity";
+import { IProductRepository } from "../../src/product/product.repository.interface";
+import { Customer } from "../../src/customer/customer.entity";
+import { ICustomerRepository } from "../../src/customer/customer.repository.interface";
+import { ValidationError } from "../../src/errors";
+import { validCustomer, validProduct } from "../fixtures";
 
 // In-memory fakes of the three repositories CartService depends on.
 
@@ -130,51 +130,30 @@ class FakeCustomerRepository implements ICustomerRepository {
   }
 }
 
-// Helpers to build test entities without repeating every field.
-function buildProduct(overrides: Partial<Product> & Pick<Product, "id">): Product {
-  return {
-    name: "Producto",
-    description: null,
-    image_url: null,
-    type: "stock",
-    price: 100,
-    stock: 10,
-    category_id: "cat-1",
-    brand_id: "brand-1",
-    is_active: true,
-    ...overrides,
-  };
-}
-
-function buildCustomer(overrides: Partial<Customer> & Pick<Customer, "id" | "user_id">): Customer {
-  return {
-    name: "Cliente",
-    government_id: null,
-    tax_status: "consumidor_final",
-    phone: null,
-    address: null,
-    created_at: "2026-01-01T00:00:00.000Z",
-    ...overrides,
-  };
-}
-
 // Shared scenario: one customer (user-1 -> cus-1) with an empty cart, a stock
 // product, a low-stock product, an "encargo" product and a discontinued one.
 function setup() {
   const productRepository = new FakeProductRepository(
-    new Map([
-      ["p-stock", buildProduct({ id: "p-stock", name: "Teclado", price: 100, stock: 10 })],
-      ["p-low", buildProduct({ id: "p-low", name: "Mouse", price: 50, stock: 2 })],
+    new Map<string, Product>([
+      ["p-stock", { ...validProduct, id: "p-stock", name: "Teclado", price: 100, stock: 10 }],
+      ["p-low", { ...validProduct, id: "p-low", name: "Mouse", price: 50, stock: 2 }],
       [
         "p-encargo",
-        buildProduct({ id: "p-encargo", name: "Notebook", type: "encargo", price: null, stock: 0 }),
+        {
+          ...validProduct,
+          id: "p-encargo",
+          name: "Notebook",
+          type: "encargo",
+          price: null,
+          stock: 0,
+        },
       ],
-      ["p-inactive", buildProduct({ id: "p-inactive", name: "Monitor", is_active: false })],
+      ["p-inactive", { ...validProduct, id: "p-inactive", name: "Monitor", is_active: false }],
     ]),
   );
   const cartRepository = new FakeCartRepository();
   const customerRepository = new FakeCustomerRepository([
-    buildCustomer({ id: "cus-1", user_id: "user-1" }),
+    { ...validCustomer, id: "cus-1", user_id: "user-1" },
   ]);
   const service = new CartService(cartRepository, productRepository, customerRepository);
 

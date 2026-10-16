@@ -1,0 +1,11 @@
+{
+  // Config del build (npm run build): compila solo src/ a dist/, sin los tests.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "noEmit": false,
+    // Los tipos de Jest no tienen que estar disponibles en el codigo de la app.
+    "types": ["node"]
+  },
+  "include": ["src"]
+}

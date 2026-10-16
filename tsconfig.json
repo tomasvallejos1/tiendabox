@@ -1,16 +1,22 @@
 {
   // Visit https://aka.ms/tsconfig to read more about this file
+  // Config de verificacion de tipos (tsc --noEmit y el editor): cubre src/ y test/.
+  // El build usa tsconfig.build.json, que compila solo src/ a dist/.
   "compilerOptions": {
     // File Layout
-    "rootDir": "./src",
+    "rootDir": ".",
     "outDir": "./dist",
+    // Esta config no emite: compilarla dejaria dist/src/... y dist/test/... y rompe npm start.
+    "noEmit": true,
 
     // Environment Settings
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "target": "es2022",
     "lib": ["es2022"],
-    "types": ["node"],
+    // jest: globals de los tests (describe, it, expect). Babel no verifica tipos, asi que
+    // tsc es la unica red de seguridad para test/.
+    "types": ["node", "jest"],
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
 
@@ -29,7 +35,6 @@
     "skipLibCheck": true
   },
 
-  // Solo src/: sin esto tsc tambien toma vitest.config.ts, que esta fuera de rootDir.
-  // Los .test.ts viven en src/, asi que siguen typecheckeados.
-  "include": ["src"]
+  // Sin los *.config.cjs de la raiz: son JavaScript y no forman parte de la app.
+  "include": ["src", "test"]
 }

@@ -1,14 +1,14 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { OrderService } from "./order.service";
-import { Order, OrderStatus } from "./order.entity";
-import { IOrderRepository } from "./order.repository.interface";
-import { Product } from "../product/product.entity";
-import { IProductRepository } from "../product/product.repository.interface";
-import { Cart } from "../cart/cart.entity";
-import { ICartRepository } from "../cart/cart.repository.interface";
-import { Customer } from "../customer/customer.entity";
-import { ICustomerRepository } from "../customer/customer.repository.interface";
-import { ForbiddenError, ValidationError } from "../errors";
+import { OrderService } from "../../src/order/order.service";
+import { Order, OrderStatus } from "../../src/order/order.entity";
+import { IOrderRepository } from "../../src/order/order.repository.interface";
+import { Product } from "../../src/product/product.entity";
+import { IProductRepository } from "../../src/product/product.repository.interface";
+import { Cart } from "../../src/cart/cart.entity";
+import { ICartRepository } from "../../src/cart/cart.repository.interface";
+import { Customer } from "../../src/customer/customer.entity";
+import { ICustomerRepository } from "../../src/customer/customer.repository.interface";
+import { ForbiddenError, ValidationError } from "../../src/errors";
+import { validCustomer, validProduct } from "../fixtures";
 
 // Fakes en memoria de los cuatro repositorios que consume OrderService.
 // Cada fake guarda estado mutable para poder afirmar sobre los efectos
@@ -192,52 +192,31 @@ class FakeCustomerRepository implements ICustomerRepository {
   }
 }
 
-// Helpers para armar entidades de prueba sin repetir todos los campos.
-function buildProduct(overrides: Partial<Product> & Pick<Product, "id">): Product {
-  return {
-    name: "Producto",
-    description: null,
-    image_url: null,
-    type: "stock",
-    price: 100,
-    stock: 10,
-    category_id: "cat-1",
-    brand_id: "brand-1",
-    is_active: true,
-    ...overrides,
-  };
-}
-
-function buildCustomer(overrides: Partial<Customer> & Pick<Customer, "id" | "user_id">): Customer {
-  return {
-    name: "Cliente",
-    government_id: null,
-    tax_status: "consumidor_final",
-    phone: null,
-    address: null,
-    created_at: "2026-01-01T00:00:00.000Z",
-    ...overrides,
-  };
-}
-
 // Escenario base compartido: dos clientes (user-1 -> cus-1, user-2 -> cus-2),
 // dos productos de stock y uno por encargo.
 function setup() {
   const productRepository = new FakeProductRepository(
-    new Map([
-      ["p1", buildProduct({ id: "p1", name: "Teclado", stock: 8, price: 100 })],
-      ["p2", buildProduct({ id: "p2", name: "Mouse", stock: 4, price: 50 })],
+    new Map<string, Product>([
+      ["p1", { ...validProduct, id: "p1", name: "Teclado", stock: 8, price: 100 }],
+      ["p2", { ...validProduct, id: "p2", name: "Mouse", stock: 4, price: 50 }],
       [
         "p-encargo",
-        buildProduct({ id: "p-encargo", name: "Notebook", type: "encargo", price: null, stock: 0 }),
+        {
+          ...validProduct,
+          id: "p-encargo",
+          name: "Notebook",
+          type: "encargo",
+          price: null,
+          stock: 0,
+        },
       ],
     ]),
   );
   const orderRepository = new FakeOrderRepository();
   const cartRepository = new FakeCartRepository();
   const customerRepository = new FakeCustomerRepository([
-    buildCustomer({ id: "cus-1", user_id: "user-1" }),
-    buildCustomer({ id: "cus-2", user_id: "user-2" }),
+    { ...validCustomer, id: "cus-1", user_id: "user-1" },
+    { ...validCustomer, id: "cus-2", user_id: "user-2" },
   ]);
   const service = new OrderService(
     orderRepository,

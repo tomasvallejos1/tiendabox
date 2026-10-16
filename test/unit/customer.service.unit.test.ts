@@ -1,10 +1,9 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { CustomerService } from "./customer.service";
-import { Customer } from "./customer.entity";
-import { ICustomerRepository } from "./customer.repository.interface";
-import { User } from "../user/user.entity";
-import { IUserRepository } from "../user/user.repository.interface";
-import { ConflictError } from "../errors";
+import { CustomerService } from "../../src/customer/customer.service";
+import { Customer } from "../../src/customer/customer.entity";
+import { ICustomerRepository } from "../../src/customer/customer.repository.interface";
+import { User } from "../../src/user/user.entity";
+import { IUserRepository } from "../../src/user/user.repository.interface";
+import { ConflictError } from "../../src/errors";
 
 // Fake en memoria de ICustomerRepository. failOnCreate simula una caida de la base
 // justo al insertar el cliente.
