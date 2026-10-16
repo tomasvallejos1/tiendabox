@@ -1,11 +1,13 @@
 import crypto from "crypto";
-import { Pool } from "pg";
+import { Pool, PoolClient } from "pg";
 import { Customer } from "./customer.entity";
 import { ICustomerRepository } from "./customer.repository.interface";
 
 // Implementacion del repositorio que SOLO habla con PostgreSQL.
 export class CustomerRepositoryPostgres implements ICustomerRepository {
-  constructor(private readonly pool: Pool) {}
+  // Acepta un PoolClient ademas del Pool: los tests de integracion corren cada caso dentro
+  // de una transaccion (BEGIN/ROLLBACK), que tiene que usar siempre la misma conexion.
+  constructor(private readonly pool: Pool | PoolClient) {}
 
   async create(data: Omit<Customer, "id" | "created_at">): Promise<Customer> {
     const newId = crypto.randomUUID();

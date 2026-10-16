@@ -1,11 +1,13 @@
 import crypto from "crypto";
-import { Pool } from "pg";
+import { Pool, PoolClient } from "pg";
 import { Order, OrderItem, OrderStatus } from "./order.entity";
 import { IOrderRepository } from "./order.repository.interface";
 
 // Implementacion del repositorio de Order que habla con PostgreSQL.
 export class OrderRepositoryPostgres implements IOrderRepository {
-  constructor(private readonly pool: Pool) {}
+  // Acepta un PoolClient ademas del Pool: los tests de integracion corren cada caso dentro
+  // de una transaccion (BEGIN/ROLLBACK), que tiene que usar siempre la misma conexion.
+  constructor(private readonly pool: Pool | PoolClient) {}
 
   async create(data: {
     customer_id: string;
