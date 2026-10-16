@@ -1,5 +1,8 @@
 # TiendaBox
 
+[![CI (main)](https://github.com/tomasvallejos1/tiendabox/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/tomasvallejos1/tiendabox/actions/workflows/ci.yml?query=branch%3Amain)
+[![CI (develop)](https://github.com/tomasvallejos1/tiendabox/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/tomasvallejos1/tiendabox/actions/workflows/ci.yml?query=branch%3Adevelop)
+
 API REST para una tienda de productos electrónicos, con catálogo público, carrito de compras y gestión de pedidos. Trabajo final de **Desarrollo de Software**, UTN FRVT, 2026.
 
 Construida con **Node.js + TypeScript + Express**. Usa **MongoDB** para el catálogo y **PostgreSQL** para usuarios, carritos y pedidos.
@@ -101,6 +104,17 @@ git push --no-verify
 ```
 
 No es para el día a día: el código que se pushea sin verificar puede romper el build o los tests de todo el equipo. En el CI los hooks se desactivan con la variable de entorno `HUSKY=0`.
+
+### Integración continua
+
+Cada push y cada pull request a `main` o `develop` corre el workflow [`ci.yml`](.github/workflows/ci.yml) en GitHub Actions, con cuatro jobs en paralelo:
+
+| Job                    | Qué verifica                                                                                                   |
+|------------------------|----------------------------------------------------------------------------------------------------------------|
+| **Calidad estática**   | Tipos (`tsc --noEmit`), lint y formato con Prettier, sin ejecutar código.                                      |
+| **Tests unitarios**    | Los tests de `test/unit/` con el umbral de coverage de `jest.config.cjs`. El reporte se descarga como artifact desde la pestaña Actions. |
+| **Tests de integración** | Los tests de `test/integration/` contra Postgres y Mongo reales, levantados con Testcontainers (Docker ya viene en el runner). |
+| **Build**              | Que el proyecto compile a `dist/` con `npm run build`.                                                         |
 
 ---
 

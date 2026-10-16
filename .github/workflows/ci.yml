@@ -1,0 +1,133 @@
+# Integracion continua: verifica cada push y cada pull request a main y develop.
+# Los 4 jobs corren en paralelo (ninguno depende de otro), asi el feedback llega antes
+# y un fallo en uno no oculta los resultados de los demas.
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  # Permite correrlo a mano desde la pestaña Actions.
+  workflow_dispatch:
+
+# Solo lectura del repo: ningun job necesita escribir.
+permissions:
+  contents: read
+
+jobs:
+  # Calidad estatica: tipos, lint y formato, sin ejecutar codigo.
+  quality:
+    name: Calidad estática
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # Desactiva los hooks de Husky: en CI no hay commits ni pushes que verificar.
+      HUSKY: "0"
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v7
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Verificar tipos (src y test)
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Verificar formato
+        run: npx prettier --check src test
+
+  # Tests unitarios con coverage: si no se llega al umbral de jest.config.cjs, el job falla.
+  unit-tests:
+    name: Tests unitarios
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      HUSKY: "0"
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v7
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      # Se acota a test/unit: "jest --coverage" sin filtro tambien tomaria test/integration,
+      # que ya corre en su propio job.
+      - name: Tests unitarios con coverage
+        run: npm run test:coverage -- test/unit --ci
+
+      # always(): el reporte se sube aunque no se llegue al umbral, para ver que falta cubrir.
+      - name: Subir reporte de coverage
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # Tests de integracion contra Postgres y Mongo reales, levantados con Testcontainers.
+  # Testcontainers necesita Docker: los runners ubuntu-latest de GitHub ya lo traen
+  # instalado y corriendo, asi que no hace falta configurar nada extra.
+  integration-tests:
+    name: Tests de integración
+    runs-on: ubuntu-latest
+    # Levantar los contenedores tarda (descarga de imagenes y arranque de las bases).
+    timeout-minutes: 15
+    env:
+      HUSKY: "0"
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v7
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      # --passWithNoTests: mientras test/integration no tenga tests, Jest saldria con error
+      # por "No tests found". Cuando se agreguen tests, se ejecutan y pueden fallar normalmente.
+      - name: Tests de integración
+        run: npm run test:integration -- --ci --passWithNoTests
+
+  # Build de produccion: verifica que el proyecto compile a dist/ sin errores.
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      HUSKY: "0"
+    steps:
+      - name: Checkout del repositorio
+        uses: actions/checkout@v7
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Compilar
+        run: npm run build
