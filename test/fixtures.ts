@@ -44,6 +44,13 @@ export const validUser: Omit<User, "id" | "created_at"> = {
   role: "cliente",
 };
 
+// Alta de una cuenta desde el registro publico de la tienda.
+export const validRegistration: { name: string; email: string; password: string } = {
+  name: "Maria Gomez",
+  email: "maria@example.com",
+  password: "secreto123",
+};
+
 export const validCategory: Omit<Category, "id"> = {
   name: "Notebooks",
   description: "Computadoras portátiles",
