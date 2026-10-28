@@ -133,5 +133,36 @@ describe("Alta de cuentas (AuthService.register) — integración con BD real", 
       );
       expect(rows[0].n).toBe(0);
     });
+
+    // El caso real en que falla el ROLLBACK: la base corta la conexion a mitad de la
+    // transaccion. pg emite 'error' en el client y, como el pool le saca su listener
+    // mientras esta prestado, sin un listener propio ese error tiraria abajo el proceso.
+    it("si se corta la conexión, propaga el error, descarta la conexión y el proceso sigue vivo", async () => {
+      const error = new Error("fallo después de perder la conexión");
+      let discardedPid: number | undefined;
+
+      await expect(
+        withTransaction(pool, async (client) => {
+          await new UserRepositoryPostgres(client).create({
+            email: "cortada@example.com",
+            password: "secreto123",
+            role: "cliente",
+          });
+          const { rows } = await client.query("SELECT pg_backend_pid() AS pid");
+          discardedPid = rows[0].pid;
+          // Se suscribe antes de cortar, para no perder el evento si llega rapido.
+          const ended = new Promise((resolve) => client.once("end", resolve));
+          await pool.query("SELECT pg_terminate_backend($1)", [discardedPid]);
+          await ended;
+          throw error;
+        }),
+      ).rejects.toBe(error);
+
+      // Lo escrito antes del corte no se confirmo, y el pool sigue funcionando con
+      // conexiones nuevas: la cortada no volvio al pool.
+      expect(await countUsersWithEmail("cortada@example.com")).toBe(0);
+      const { rows } = await pool.query("SELECT pg_backend_pid() AS pid");
+      expect(rows[0].pid).not.toBe(discardedPid);
+    });
   });
 });

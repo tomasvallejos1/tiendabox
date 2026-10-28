@@ -4,6 +4,7 @@ import type { User } from "../src/user/user.entity";
 import type { Category } from "../src/category/category.entity";
 import type { Brand } from "../src/brand/brand.entity";
 import type { IOrderRepository } from "../src/order/order.repository.interface";
+import type { Request, Response } from "express";
 
 // Datos de prueba compartidos entre los tests. Cada test arma sus variantes con spread,
 // por ejemplo: { ...validProduct, id: "p1", stock: 0 }.
@@ -72,3 +73,35 @@ export const validNewOrder: Omit<Parameters<IOrderRepository["create"]>[0], "cus
     { product_id: "p1", product_name: "Teclado", unit_price: 100, quantity: 2, type: "stock" },
   ],
 };
+
+// Dobles minimos de Express para probar middlewares y controllers sin levantar un servidor.
+
+// Response que registra lo que se llamo: el codigo, el body y si se cerro con send().
+// status/json/send devuelven el mismo objeto, para poder encadenarlos como en Express.
+export function createMockResponse() {
+  const mock = {
+    statusCode: undefined as number | undefined,
+    body: undefined as unknown,
+    sent: false,
+    status(code: number) {
+      mock.statusCode = code;
+      return mock;
+    },
+    json(body: unknown) {
+      mock.body = body;
+      mock.sent = true;
+      return mock;
+    },
+    send(body?: unknown) {
+      mock.body = body;
+      mock.sent = true;
+      return mock;
+    },
+  };
+  return mock as typeof mock & Response;
+}
+
+// Request con solo lo que usan los middlewares y controllers; cada test pisa lo que necesite.
+export function createMockRequest(overrides: Partial<Request> = {}): Request {
+  return { headers: {}, params: {}, query: {}, body: {}, ...overrides } as Request;
+}
