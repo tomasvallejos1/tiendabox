@@ -13,6 +13,7 @@ export function createCartRoutes(
 
   router.get("/cart", guards.auth, guards.clienteOnly, controller.getCart);
   router.post("/cart/items", guards.auth, guards.clienteOnly, controller.addItem);
+  router.put("/cart/items/:productId", guards.auth, guards.clienteOnly, controller.updateItem);
   router.delete("/cart/items/:productId", guards.auth, guards.clienteOnly, controller.removeItem);
   router.delete("/cart", guards.auth, guards.clienteOnly, controller.clear);
 

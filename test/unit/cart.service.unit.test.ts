@@ -306,6 +306,113 @@ describe("CartService (carrito enriquecido)", () => {
     await expect(ctx.service.addItem("user-1", "p-low", 3)).rejects.toThrow(ValidationError);
   });
 
+  describe("updateItemQuantity", () => {
+    it("fija la cantidad de 3 a 1 sin sumarla y la guarda", async () => {
+      await seedCart(ctx, [["p-stock", 3]]);
+
+      const cart = await ctx.service.updateItemQuantity("user-1", "p-stock", 1);
+
+      expect(cart.items).toHaveLength(1);
+      expect(cart.items[0]?.quantity).toBe(1);
+      const stored = await ctx.cartRepository.getByCustomerId("cus-1");
+      expect(stored?.items[0]?.quantity).toBe(1);
+    });
+
+    it("permite subir la cantidad hasta el stock exacto", async () => {
+      await seedCart(ctx, [["p-stock", 3]]);
+
+      const cart = await ctx.service.updateItemQuantity("user-1", "p-stock", 10);
+
+      expect(cart.items[0]?.quantity).toBe(10);
+      expect(cart.items[0]?.exceeds_stock).toBe(false);
+      expect(cart.total).toBe(1000);
+    });
+
+    it("rechaza superar el stock sin modificar la cantidad guardada", async () => {
+      await seedCart(ctx, [["p-low", 1]]);
+
+      await expect(ctx.service.updateItemQuantity("user-1", "p-low", 3)).rejects.toThrow(
+        new ValidationError("Stock insuficiente. Disponible: 2"),
+      );
+      const stored = await ctx.cartRepository.getByCustomerId("cus-1");
+      expect(stored?.items[0]?.quantity).toBe(1);
+    });
+
+    it("permite una cantidad sin limite de stock para productos por encargo", async () => {
+      await seedCart(ctx, [["p-encargo", 1]]);
+
+      const cart = await ctx.service.updateItemQuantity("user-1", "p-encargo", 1000);
+
+      expect(cart.items[0]?.quantity).toBe(1000);
+      expect(cart.items[0]?.subtotal).toBeNull();
+      expect(cart.item_count).toBe(1000);
+      expect(cart.total).toBe(0);
+      expect(cart.has_encargo_items).toBe(true);
+    });
+
+    it.each([0, -1, 1.5, "1", "", null, undefined])(
+      "rechaza la cantidad invalida %p sin modificar el carrito",
+      async (quantity) => {
+        await seedCart(ctx, [["p-stock", 3]]);
+
+        await expect(ctx.service.updateItemQuantity("user-1", "p-stock", quantity)).rejects.toThrow(
+          new ValidationError("La cantidad debe ser un entero mayor a 0"),
+        );
+        const stored = await ctx.cartRepository.getByCustomerId("cus-1");
+        expect(stored?.items[0]?.quantity).toBe(3);
+      },
+    );
+
+    it("rechaza un producto que no esta en el carrito", async () => {
+      await seedCart(ctx, [["p-stock", 1]]);
+
+      await expect(ctx.service.updateItemQuantity("user-1", "p-low", 1)).rejects.toThrow(
+        new ValidationError("El producto no está en el carrito"),
+      );
+      const stored = await ctx.cartRepository.getByCustomerId("cus-1");
+      expect(stored?.items.map((item) => item.product_id)).toEqual(["p-stock"]);
+    });
+
+    it("rechaza la actualizacion sin crear un carrito si el cliente no tiene uno", async () => {
+      await expect(ctx.service.updateItemQuantity("user-1", "p-stock", 1)).rejects.toThrow(
+        new ValidationError("El producto no está en el carrito"),
+      );
+      expect(ctx.cartRepository.carts.size).toBe(0);
+    });
+
+    it.each(["p-inactive", "p-borrado"])(
+      "rechaza el producto no disponible %s sin modificar el carrito",
+      async (productId) => {
+        await seedCart(ctx, [[productId, 3]]);
+
+        await expect(ctx.service.updateItemQuantity("user-1", productId, 1)).rejects.toThrow(
+          new ValidationError("Producto no disponible"),
+        );
+        const stored = await ctx.cartRepository.getByCustomerId("cus-1");
+        expect(stored?.items[0]?.quantity).toBe(3);
+      },
+    );
+
+    it("devuelve el detalle con item_count, subtotales y total recalculados", async () => {
+      await seedCart(ctx, [
+        ["p-stock", 3],
+        ["p-low", 2],
+        ["p-encargo", 4],
+      ]);
+
+      const cart = await ctx.service.updateItemQuantity("user-1", "p-stock", 1);
+
+      expect(cart.items.map((item) => [item.product_id, item.quantity, item.subtotal])).toEqual([
+        ["p-stock", 1, 100],
+        ["p-low", 2, 100],
+        ["p-encargo", 4, null],
+      ]);
+      expect(cart.item_count).toBe(7);
+      expect(cart.total).toBe(200);
+      expect(ctx.productRepository.getByIdsCalls).toBe(1);
+    });
+  });
+
   it("removeItem devuelve el carrito enriquecido sin el item", async () => {
     await seedCart(ctx, [
       ["p-stock", 1],

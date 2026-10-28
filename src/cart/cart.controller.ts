@@ -27,6 +27,18 @@ export class CartController {
     }
   };
 
+  updateItem = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const userId = req.user!.id;
+      const productId = req.params["productId"] as string;
+      const { quantity } = req.body;
+      const cart = await this.service.updateItemQuantity(userId, productId, quantity);
+      res.status(200).json(cart);
+    } catch (error) {
+      this.handleError(res, error);
+    }
+  };
+
   removeItem = async (req: Request, res: Response): Promise<void> => {
     try {
       const userId = req.user!.id;

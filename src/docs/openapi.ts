@@ -1613,6 +1613,79 @@ const openApiSpec = {
     },
 
     "/api/cart/items/{productId}": {
+      put: {
+        tags: ["Cart"],
+        summary: "Fijar la cantidad de un item del carrito — Solo cliente",
+        description:
+          "Requiere autenticación y rol cliente. El producto debe estar en el carrito y disponible. " +
+          "Reemplaza la cantidad por un entero mayor a 0. Para eliminar el item, usar DELETE. " +
+          "Los productos tipo 'stock' no pueden superar el stock disponible; los de encargo no tienen límite de stock.",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "productId",
+            in: "path" as const,
+            required: true,
+            schema: { type: "string" as const },
+            description: "ID del producto cuya cantidad se quiere fijar",
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object" as const,
+                properties: {
+                  quantity: { type: "integer" as const, minimum: 1, example: 1 },
+                },
+                required: ["quantity"],
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description:
+              "Carrito actualizado con cantidades, subtotales, item_count y total recalculados",
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/CartDetail" } },
+            },
+          },
+          "400": {
+            description:
+              "Cantidad inválida, producto ausente del carrito o no disponible, stock insuficiente o usuario sin perfil de cliente",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/Error" },
+                examples: {
+                  invalidQuantity: {
+                    value: { error: "La cantidad debe ser un entero mayor a 0" },
+                  },
+                  missingItem: { value: { error: "El producto no está en el carrito" } },
+                  unavailableProduct: { value: { error: "Producto no disponible" } },
+                  insufficientStock: { value: { error: "Stock insuficiente. Disponible: 2" } },
+                  missingCustomer: {
+                    value: { error: "No existe un perfil de cliente para este usuario" },
+                  },
+                },
+              },
+            },
+          },
+          "401": {
+            description: "No autenticado",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+          },
+          "403": {
+            description: "No autorizado (requiere rol cliente)",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+          },
+          "500": {
+            description: "Error interno del servidor",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+          },
+        },
+      },
       delete: {
         tags: ["Cart"],
         summary: "Eliminar un item del carrito — Solo cliente",
