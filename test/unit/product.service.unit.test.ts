@@ -1,20 +1,24 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { ProductService } from "./product.service";
-import { Product } from "./product.entity";
-import { IProductRepository, ProductFilter } from "./product.repository.interface";
-import { ICategoryRepository } from "../category/category.repository.interface";
-import { IBrandRepository } from "../brand/brand.repository.interface";
+import { ProductService } from "../../src/product/product.service";
+import { Product } from "../../src/product/product.entity";
+import { IProductRepository, ProductFilter } from "../../src/product/product.repository.interface";
+import { ICategoryRepository } from "../../src/category/category.repository.interface";
+import { IBrandRepository } from "../../src/brand/brand.repository.interface";
+import { validProduct } from "../fixtures";
 
 // Fake en memoria de IProductRepository. getAll replica la semantica del repo
 // real de Mongo: siempre filtra is_active === true y aplica category_id/brand_id si vienen.
 class FakeProductRepository implements IProductRepository {
   constructor(private readonly products: Product[]) {}
 
-  async create(): Promise<Product> {
-    throw new Error("no usado en estos tests");
+  async create(data: Omit<Product, "id">): Promise<Product> {
+    return { id: "nuevo", ...data };
   }
 
   async getById(): Promise<Product | null> {
+    throw new Error("no usado en estos tests");
+  }
+
+  async getByIds(): Promise<Product[]> {
     throw new Error("no usado en estos tests");
   }
 
@@ -48,31 +52,16 @@ class FakeProductRepository implements IProductRepository {
 const categoryRepositoryStub = {} as ICategoryRepository;
 const brandRepositoryStub = {} as IBrandRepository;
 
-// Helper para armar productos de prueba sin repetir todos los campos.
-function buildProduct(overrides: Partial<Product> & Pick<Product, "id">): Product {
-  return {
-    name: "Producto",
-    description: null,
-    type: "stock",
-    price: 100,
-    stock: 10,
-    category_id: "cat-1",
-    brand_id: "brand-1",
-    is_active: true,
-    ...overrides,
-  };
-}
-
 describe("ProductService.getAll (filtros)", () => {
   let service: ProductService;
 
   // Dataset: combinaciones de categoria/marca + un inactivo que nunca debe aparecer.
   const products: Product[] = [
-    buildProduct({ id: "1", category_id: "cat-1", brand_id: "brand-1" }),
-    buildProduct({ id: "2", category_id: "cat-1", brand_id: "brand-2" }),
-    buildProduct({ id: "3", category_id: "cat-2", brand_id: "brand-1" }),
-    buildProduct({ id: "4", category_id: "cat-2", brand_id: "brand-2" }),
-    buildProduct({ id: "5", category_id: "cat-1", brand_id: "brand-1", is_active: false }),
+    { ...validProduct, id: "1", category_id: "cat-1", brand_id: "brand-1" },
+    { ...validProduct, id: "2", category_id: "cat-1", brand_id: "brand-2" },
+    { ...validProduct, id: "3", category_id: "cat-2", brand_id: "brand-1" },
+    { ...validProduct, id: "4", category_id: "cat-2", brand_id: "brand-2" },
+    { ...validProduct, id: "5", category_id: "cat-1", brand_id: "brand-1", is_active: false },
   ];
 
   beforeEach(() => {
@@ -114,5 +103,50 @@ describe("ProductService.getAll (filtros)", () => {
     const conFiltro = await service.getAll({ category_id: "cat-1", brand_id: "brand-1" });
     expect(conFiltro.map((p) => p.id)).toEqual(["1"]);
     expect(conFiltro.some((p) => p.id === "5")).toBe(false);
+  });
+});
+
+describe("ProductService.create (image_url)", () => {
+  let service: ProductService;
+
+  // Body minimo valido; cada test le suma su image_url.
+  const baseInput = {
+    name: "Macbook Pro 14",
+    type: "stock",
+    price: 100,
+    stock: 10,
+    category_id: "cat-1",
+    brand_id: "brand-1",
+  };
+
+  beforeEach(() => {
+    const repository = new FakeProductRepository([]);
+    service = new ProductService(repository, categoryRepositoryStub, brandRepositoryStub);
+  });
+
+  it("guarda la URL cuando empieza con http:// o https://", async () => {
+    const https = await service.create({ ...baseInput, image_url: "https://example.com/a.jpg" });
+    expect(https.image_url).toBe("https://example.com/a.jpg");
+
+    const http = await service.create({ ...baseInput, image_url: "http://example.com/a.jpg" });
+    expect(http.image_url).toBe("http://example.com/a.jpg");
+  });
+
+  it("queda en null si no viene", async () => {
+    const result = await service.create(baseInput);
+    expect(result.image_url).toBeNull();
+  });
+
+  it("normaliza el string vacio a null", async () => {
+    const result = await service.create({ ...baseInput, image_url: "" });
+    expect(result.image_url).toBeNull();
+  });
+
+  it("rechaza valores que no son un enlace http(s)", async () => {
+    const mensaje = "La URL de la imagen debe comenzar con http:// o https://";
+    await expect(service.create({ ...baseInput, image_url: "ftp://x/a.jpg" })).rejects.toThrow(
+      mensaje,
+    );
+    await expect(service.create({ ...baseInput, image_url: 123 })).rejects.toThrow(mensaje);
   });
 });

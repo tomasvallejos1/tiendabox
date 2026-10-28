@@ -46,6 +46,7 @@ Authorization: Bearer {{loginOwner.response.body.$.token}}
 {
   "name": "Macbook Pro 14",
   "description": "Laptop de Apple con chip M1 Pro",
+  "image_url": "https://example.com/img/macbook-pro-14.jpg",
   "type": "stock",
   "price": 99.99,
   "stock": 10,
@@ -99,6 +100,19 @@ Authorization: Bearer {{loginOwner.response.body.$.token}}
 {
   "name": "Producto invalido",
   "type": "otro",
+  "category_id": "{{createCategory.response.body.$.id}}",
+  "brand_id": "{{createBrand.response.body.$.id}}"
+}
+
+### 5.1 Crear producto con image_url que no es http(s) (owner) -> 400 Bad Request
+POST {{host}}/api/product
+Content-Type: application/json
+Authorization: Bearer {{loginOwner.response.body.$.token}}
+
+{
+  "name": "Producto con imagen invalida",
+  "type": "encargo",
+  "image_url": "ftp://example.com/img/foto.jpg",
   "category_id": "{{createCategory.response.body.$.id}}",
   "brand_id": "{{createBrand.response.body.$.id}}"
 }

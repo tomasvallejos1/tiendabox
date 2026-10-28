@@ -1,4 +1,4 @@
-import { Order, OrderStatus } from "./order.entity";
+import { Order, OrderStatus, OrderWithCustomer } from "./order.entity";
 import { IOrderRepository } from "./order.repository.interface";
 import { IProductRepository } from "../product/product.repository.interface";
 import { ICartRepository } from "../cart/cart.repository.interface";
@@ -33,15 +33,73 @@ export class OrderService {
     return customer.id;
   }
 
+  // Enriquece los pedidos con los datos de su cliente. Trae todos los clientes en una
+  // sola consulta con getByIds (nunca getById en loop). El email queda afuera a
+  // proposito: vive en users y sumaria ese repositorio al service.
+  private async withCustomers(orders: Order[]): Promise<OrderWithCustomer[]> {
+    const ids = [...new Set(orders.map((order) => order.customer_id))];
+    const customers = await this.customerRepository.getByIds(ids);
+    const customersById = new Map(customers.map((customer) => [customer.id, customer]));
+
+    return orders.map((order) => {
+      const customer = customersById.get(order.customer_id);
+      return {
+        ...order,
+        // null si el cliente fue eliminado.
+        customer: customer
+          ? {
+              id: customer.id,
+              name: customer.name,
+              phone: customer.phone,
+              address: customer.address,
+              government_id: customer.government_id,
+              tax_status: customer.tax_status,
+            }
+          : null,
+      };
+    });
+  }
+
+  // Variante de withCustomers para un unico pedido.
+  private async withCustomer(order: Order): Promise<OrderWithCustomer> {
+    const [enriched] = await this.withCustomers([order]);
+    return enriched!;
+  }
+
+  // El cliente crea pedidos a su nombre; el owner los crea a nombre del cliente
+  // indicado en customer_id (no tiene perfil de cliente ni carrito propio).
   async createOrder(
     userId: string,
+    role: string,
     input: {
+      customer_id?: unknown;
       delivery_type?: unknown;
       delivery_address?: unknown;
       items?: { product_id: string; quantity: number }[];
     },
-  ): Promise<Order> {
-    const customerId = await this.resolveCustomerId(userId);
+  ): Promise<OrderWithCustomer> {
+    const isOwner = role === "owner";
+    let customerId: string;
+
+    if (isOwner) {
+      // El owner no tiene perfil de cliente: el pedido va a nombre del customer_id indicado.
+      if (typeof input.customer_id !== "string" || input.customer_id.trim().length === 0) {
+        throw new ValidationError("El campo 'customer_id' es obligatorio");
+      }
+      const customer = await this.customerRepository.getById(input.customer_id.trim());
+      if (!customer) {
+        throw new ValidationError("El cliente indicado no existe");
+      }
+      customerId = customer.id;
+
+      // El owner no tiene carrito y no debe consumir el del cliente: items es obligatorio.
+      if (!Array.isArray(input.items) || input.items.length === 0) {
+        throw new ValidationError("Debe indicar los productos del pedido");
+      }
+    } else {
+      // Un cliente no puede crear pedidos a nombre de otro: se ignora input.customer_id.
+      customerId = await this.resolveCustomerId(userId);
+    }
 
     // 1. Validar delivery_type.
     const deliveryType = this.validateDeliveryType(input.delivery_type);
@@ -167,7 +225,8 @@ export class OrderService {
       items: orderItems,
     });
 
-    // 8. Si los items vinieron del carrito, vaciarlo.
+    // 8. Si los items vinieron del carrito, vaciarlo. Nunca pasa con el owner:
+    // sus pedidos siempre traen los items en el input.
     if (fromCart) {
       const cart = await this.cartRepository.getByCustomerId(customerId);
       if (cart) {
@@ -175,24 +234,24 @@ export class OrderService {
       }
     }
 
-    return order;
+    return this.withCustomer(order);
   }
 
-  async getMyOrders(userId: string): Promise<Order[]> {
+  async getMyOrders(userId: string): Promise<OrderWithCustomer[]> {
     const customerId = await this.resolveCustomerId(userId);
-    return this.orderRepository.getByCustomerId(customerId);
+    return this.withCustomers(await this.orderRepository.getByCustomerId(customerId));
   }
 
-  async getAllOrders(statusFilter?: string): Promise<Order[]> {
-    return this.orderRepository.getAll(statusFilter);
+  async getAllOrders(statusFilter?: string): Promise<OrderWithCustomer[]> {
+    return this.withCustomers(await this.orderRepository.getAll(statusFilter));
   }
 
-  async getById(orderId: string, userId: string, role: string): Promise<Order | null> {
+  async getById(orderId: string, userId: string, role: string): Promise<OrderWithCustomer | null> {
     const order = await this.orderRepository.getById(orderId);
     if (!order) return null;
 
     // El owner puede ver cualquier pedido.
-    if (role === "owner") return order;
+    if (role === "owner") return this.withCustomer(order);
 
     // Para otros roles, verificar que la orden pertenezca al cliente.
     const customerId = await this.resolveCustomerId(userId);
@@ -200,7 +259,7 @@ export class OrderService {
       throw new ForbiddenError("No tiene permiso para ver este pedido");
     }
 
-    return order;
+    return this.withCustomer(order);
   }
 
   // Avanza el estado de la orden un paso en el flujo lineal (owner).
@@ -228,21 +287,37 @@ export class OrderService {
     return this.orderRepository.updateStatus(orderId, newStatus);
   }
 
-  // Cancela la orden si pertenece al cliente y está pendiente.
-  async cancelOrder(orderId: string, userId: string): Promise<Order | null> {
-    const customerId = await this.resolveCustomerId(userId);
-    const order = await this.orderRepository.getById(orderId);
-    if (!order) return null;
+  // Cancela la orden. El owner puede cancelar cualquier pedido que no este entregado
+  // ni cancelado; el cliente solo los propios y mientras esten pendientes.
+  async cancelOrder(orderId: string, userId: string, role: string): Promise<Order | null> {
+    let order: Order | null;
 
-    // Verificar que la orden pertenezca al customer. Es un problema de permisos,
-    // no de validacion: mismo criterio que getById, el controller lo mapea a 403.
-    if (order.customer_id !== customerId) {
-      throw new ForbiddenError("No puede cancelar un pedido de otro cliente");
-    }
+    if (role === "owner") {
+      // El owner no tiene perfil de cliente: no se resuelve customer.
+      order = await this.orderRepository.getById(orderId);
+      if (!order) return null;
 
-    // Solo se puede cancelar si está pendiente.
-    if (order.status !== "pendiente") {
-      throw new ValidationError("Solo se puede cancelar un pedido pendiente");
+      if (order.status === "entregado") {
+        throw new ValidationError("No se puede cancelar un pedido ya entregado");
+      }
+      if (order.status === "cancelado") {
+        throw new ValidationError("El pedido ya está cancelado");
+      }
+    } else {
+      const customerId = await this.resolveCustomerId(userId);
+      order = await this.orderRepository.getById(orderId);
+      if (!order) return null;
+
+      // Verificar que la orden pertenezca al customer. Es un problema de permisos,
+      // no de validacion: mismo criterio que getById, el controller lo mapea a 403.
+      if (order.customer_id !== customerId) {
+        throw new ForbiddenError("No puede cancelar un pedido de otro cliente");
+      }
+
+      // Solo se puede cancelar si está pendiente.
+      if (order.status !== "pendiente") {
+        throw new ValidationError("Solo se puede cancelar un pedido pendiente");
+      }
     }
 
     // Reponer stock de productos tipo stock (operación inversa al descuento en createOrder).

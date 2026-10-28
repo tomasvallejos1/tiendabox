@@ -1,14 +1,14 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { OrderService } from "./order.service";
-import { Order, OrderStatus } from "./order.entity";
-import { IOrderRepository } from "./order.repository.interface";
-import { Product } from "../product/product.entity";
-import { IProductRepository } from "../product/product.repository.interface";
-import { Cart } from "../cart/cart.entity";
-import { ICartRepository } from "../cart/cart.repository.interface";
-import { Customer } from "../customer/customer.entity";
-import { ICustomerRepository } from "../customer/customer.repository.interface";
-import { ForbiddenError, ValidationError } from "../errors";
+import { OrderService } from "../../src/order/order.service";
+import { Order, OrderStatus } from "../../src/order/order.entity";
+import { IOrderRepository } from "../../src/order/order.repository.interface";
+import { Product } from "../../src/product/product.entity";
+import { IProductRepository } from "../../src/product/product.repository.interface";
+import { Cart } from "../../src/cart/cart.entity";
+import { ICartRepository } from "../../src/cart/cart.repository.interface";
+import { Customer } from "../../src/customer/customer.entity";
+import { ICustomerRepository } from "../../src/customer/customer.repository.interface";
+import { ForbiddenError, ValidationError } from "../../src/errors";
+import { validCustomer, validProduct } from "../fixtures";
 
 // Fakes en memoria de los cuatro repositorios que consume OrderService.
 // Cada fake guarda estado mutable para poder afirmar sobre los efectos
@@ -25,6 +25,13 @@ class FakeProductRepository implements IProductRepository {
   async getById(id: string): Promise<Product | null> {
     const product = this.products.get(id);
     return product && product.is_active ? { ...product } : null;
+  }
+
+  // Mirrors the Mongo repo: returns inactive products too.
+  async getByIds(ids: string[]): Promise<Product[]> {
+    return [...this.products.values()]
+      .filter((product) => ids.includes(product.id))
+      .map((product) => ({ ...product }));
   }
 
   async getAll(): Promise<Product[]> {
@@ -164,6 +171,10 @@ class FakeCustomerRepository implements ICustomerRepository {
     return this.customers.find((customer) => customer.id === id) ?? null;
   }
 
+  async getByIds(ids: string[]): Promise<Customer[]> {
+    return this.customers.filter((customer) => ids.includes(customer.id));
+  }
+
   async getByUserId(userId: string): Promise<Customer | null> {
     return this.customers.find((customer) => customer.user_id === userId) ?? null;
   }
@@ -181,51 +192,31 @@ class FakeCustomerRepository implements ICustomerRepository {
   }
 }
 
-// Helpers para armar entidades de prueba sin repetir todos los campos.
-function buildProduct(overrides: Partial<Product> & Pick<Product, "id">): Product {
-  return {
-    name: "Producto",
-    description: null,
-    type: "stock",
-    price: 100,
-    stock: 10,
-    category_id: "cat-1",
-    brand_id: "brand-1",
-    is_active: true,
-    ...overrides,
-  };
-}
-
-function buildCustomer(overrides: Partial<Customer> & Pick<Customer, "id" | "user_id">): Customer {
-  return {
-    name: "Cliente",
-    government_id: null,
-    tax_status: "consumidor_final",
-    phone: null,
-    address: null,
-    created_at: "2026-01-01T00:00:00.000Z",
-    ...overrides,
-  };
-}
-
 // Escenario base compartido: dos clientes (user-1 -> cus-1, user-2 -> cus-2),
 // dos productos de stock y uno por encargo.
 function setup() {
   const productRepository = new FakeProductRepository(
-    new Map([
-      ["p1", buildProduct({ id: "p1", name: "Teclado", stock: 8, price: 100 })],
-      ["p2", buildProduct({ id: "p2", name: "Mouse", stock: 4, price: 50 })],
+    new Map<string, Product>([
+      ["p1", { ...validProduct, id: "p1", name: "Teclado", stock: 8, price: 100 }],
+      ["p2", { ...validProduct, id: "p2", name: "Mouse", stock: 4, price: 50 }],
       [
         "p-encargo",
-        buildProduct({ id: "p-encargo", name: "Notebook", type: "encargo", price: null, stock: 0 }),
+        {
+          ...validProduct,
+          id: "p-encargo",
+          name: "Notebook",
+          type: "encargo",
+          price: null,
+          stock: 0,
+        },
       ],
     ]),
   );
   const orderRepository = new FakeOrderRepository();
   const cartRepository = new FakeCartRepository();
   const customerRepository = new FakeCustomerRepository([
-    buildCustomer({ id: "cus-1", user_id: "user-1" }),
-    buildCustomer({ id: "cus-2", user_id: "user-2" }),
+    { ...validCustomer, id: "cus-1", user_id: "user-1" },
+    { ...validCustomer, id: "cus-2", user_id: "user-2" },
   ]);
   const service = new OrderService(
     orderRepository,
@@ -250,7 +241,7 @@ describe("OrderService.createOrder", () => {
   // el descuento se aplicaba dos veces, dejando el stock en negativo.
   it("rechaza items duplicados cuya suma supera el stock, sin tocar el stock", async () => {
     await expect(
-      ctx.service.createOrder("user-1", {
+      ctx.service.createOrder("user-1", "cliente", {
         delivery_type: "retiro",
         items: [
           { product_id: "p1", quantity: 5 },
@@ -264,7 +255,7 @@ describe("OrderService.createOrder", () => {
   });
 
   it("consolida items duplicados en una sola linea cuando la suma entra en stock", async () => {
-    const order = await ctx.service.createOrder("user-1", {
+    const order = await ctx.service.createOrder("user-1", "cliente", {
       delivery_type: "retiro",
       items: [
         { product_id: "p1", quantity: 3 },
@@ -280,7 +271,7 @@ describe("OrderService.createOrder", () => {
 
   it("rechaza con ValidationError si un item supera el stock disponible", async () => {
     await expect(
-      ctx.service.createOrder("user-1", {
+      ctx.service.createOrder("user-1", "cliente", {
         delivery_type: "retiro",
         items: [{ product_id: "p2", quantity: 5 }],
       }),
@@ -292,7 +283,7 @@ describe("OrderService.createOrder", () => {
 
   it("no descuenta nada si un item posterior del pedido no tiene stock", async () => {
     await expect(
-      ctx.service.createOrder("user-1", {
+      ctx.service.createOrder("user-1", "cliente", {
         delivery_type: "retiro",
         items: [
           { product_id: "p1", quantity: 2 },
@@ -315,7 +306,7 @@ describe("OrderService.createOrder", () => {
       id === "p2" ? false : decrementReal(id, quantity);
 
     await expect(
-      ctx.service.createOrder("user-1", {
+      ctx.service.createOrder("user-1", "cliente", {
         delivery_type: "retiro",
         items: [
           { product_id: "p1", quantity: 2 },
@@ -330,7 +321,7 @@ describe("OrderService.createOrder", () => {
 
   it("exige delivery_address cuando delivery_type es 'envio'", async () => {
     await expect(
-      ctx.service.createOrder("user-1", {
+      ctx.service.createOrder("user-1", "cliente", {
         delivery_type: "envio",
         items: [{ product_id: "p1", quantity: 1 }],
       }),
@@ -338,7 +329,7 @@ describe("OrderService.createOrder", () => {
 
     // Tampoco acepta una direccion en blanco.
     await expect(
-      ctx.service.createOrder("user-1", {
+      ctx.service.createOrder("user-1", "cliente", {
         delivery_type: "envio",
         delivery_address: "   ",
         items: [{ product_id: "p1", quantity: 1 }],
@@ -349,7 +340,7 @@ describe("OrderService.createOrder", () => {
   });
 
   it("acepta un envio con delivery_address y la guarda sin espacios sobrantes", async () => {
-    const order = await ctx.service.createOrder("user-1", {
+    const order = await ctx.service.createOrder("user-1", "cliente", {
       delivery_type: "envio",
       delivery_address: "  Av. Siempreviva 742  ",
       items: [{ product_id: "p1", quantity: 1 }],
@@ -364,7 +355,7 @@ describe("OrderService.createOrder", () => {
     await ctx.cartRepository.addItem(cart.id, "p1", 2);
     await ctx.cartRepository.addItem(cart.id, "p2", 1);
 
-    const order = await ctx.service.createOrder("user-1", { delivery_type: "retiro" });
+    const order = await ctx.service.createOrder("user-1", "cliente", { delivery_type: "retiro" });
 
     expect(order.items).toHaveLength(2);
     expect(order.total).toBe(250);
@@ -374,13 +365,13 @@ describe("OrderService.createOrder", () => {
   });
 
   it("rechaza si no hay items en el input ni en el carrito", async () => {
-    await expect(ctx.service.createOrder("user-1", { delivery_type: "retiro" })).rejects.toThrow(
-      ValidationError,
-    );
+    await expect(
+      ctx.service.createOrder("user-1", "cliente", { delivery_type: "retiro" }),
+    ).rejects.toThrow(ValidationError);
   });
 
   it("no descuenta stock de los productos por encargo y los deja sin precio", async () => {
-    const order = await ctx.service.createOrder("user-1", {
+    const order = await ctx.service.createOrder("user-1", "cliente", {
       delivery_type: "retiro",
       items: [{ product_id: "p-encargo", quantity: 2 }],
     });
@@ -388,6 +379,85 @@ describe("OrderService.createOrder", () => {
     expect(order.items[0]?.unit_price).toBeNull();
     expect(order.total).toBe(0);
     expect(ctx.productRepository.stockOf("p-encargo")).toBe(0);
+  });
+
+  // El owner no tiene perfil de cliente: crea el pedido a nombre del customer_id indicado.
+  it("el owner crea un pedido con customer_id e items a nombre de ese cliente", async () => {
+    const order = await ctx.service.createOrder("user-owner", "owner", {
+      customer_id: "cus-2",
+      delivery_type: "retiro",
+      items: [{ product_id: "p1", quantity: 2 }],
+    });
+
+    expect(order.customer_id).toBe("cus-2");
+    expect(order.customer?.id).toBe("cus-2");
+    expect(order.total).toBe(200);
+    expect(ctx.productRepository.stockOf("p1")).toBe(6);
+  });
+
+  it("rechaza con ValidationError si el owner no indica customer_id", async () => {
+    await expect(
+      ctx.service.createOrder("user-owner", "owner", {
+        delivery_type: "retiro",
+        items: [{ product_id: "p1", quantity: 1 }],
+      }),
+    ).rejects.toThrow(ValidationError);
+
+    expect(ctx.productRepository.stockOf("p1")).toBe(8);
+    expect(ctx.orderRepository.orders.size).toBe(0);
+  });
+
+  it("rechaza con ValidationError si el owner indica un cliente que no existe", async () => {
+    await expect(
+      ctx.service.createOrder("user-owner", "owner", {
+        customer_id: "cus-inexistente",
+        delivery_type: "retiro",
+        items: [{ product_id: "p1", quantity: 1 }],
+      }),
+    ).rejects.toThrow("El cliente indicado no existe");
+
+    expect(ctx.orderRepository.orders.size).toBe(0);
+  });
+
+  // Aunque el cliente tenga carrito, el owner no puede armar el pedido con el.
+  it("rechaza con ValidationError si el owner no indica items", async () => {
+    const cart = await ctx.cartRepository.createForCustomer("cus-1");
+    await ctx.cartRepository.addItem(cart.id, "p1", 2);
+
+    await expect(
+      ctx.service.createOrder("user-owner", "owner", {
+        customer_id: "cus-1",
+        delivery_type: "retiro",
+      }),
+    ).rejects.toThrow("Debe indicar los productos del pedido");
+
+    expect(ctx.productRepository.stockOf("p1")).toBe(8);
+    expect(ctx.orderRepository.orders.size).toBe(0);
+  });
+
+  it("no vacia el carrito del cliente cuando el pedido lo crea el owner", async () => {
+    const cart = await ctx.cartRepository.createForCustomer("cus-1");
+    await ctx.cartRepository.addItem(cart.id, "p2", 1);
+
+    await ctx.service.createOrder("user-owner", "owner", {
+      customer_id: "cus-1",
+      delivery_type: "retiro",
+      items: [{ product_id: "p1", quantity: 1 }],
+    });
+
+    expect(ctx.cartRepository.carts.get(cart.id)?.items).toHaveLength(1);
+    expect(ctx.productRepository.stockOf("p2")).toBe(4);
+  });
+
+  // Un cliente no puede crear pedidos a nombre de otro.
+  it("ignora el customer_id cuando el pedido lo crea un cliente", async () => {
+    const order = await ctx.service.createOrder("user-1", "cliente", {
+      customer_id: "cus-2",
+      delivery_type: "retiro",
+      items: [{ product_id: "p1", quantity: 1 }],
+    });
+
+    expect(order.customer_id).toBe("cus-1");
   });
 });
 
@@ -397,7 +467,7 @@ describe("OrderService.changeStatus", () => {
 
   beforeEach(async () => {
     ctx = setup();
-    const order = await ctx.service.createOrder("user-1", {
+    const order = await ctx.service.createOrder("user-1", "cliente", {
       delivery_type: "retiro",
       items: [{ product_id: "p1", quantity: 1 }],
     });
@@ -415,7 +485,7 @@ describe("OrderService.changeStatus", () => {
   });
 
   it("rechaza cambiar el estado de una orden cancelada", async () => {
-    await ctx.service.cancelOrder(orderId, "user-1");
+    await ctx.service.cancelOrder(orderId, "user-1", "cliente");
 
     await expect(ctx.service.changeStatus(orderId, "confirmado")).rejects.toThrow(ValidationError);
     expect(ctx.orderRepository.orders.get(orderId)?.status).toBe("cancelado");
@@ -432,7 +502,7 @@ describe("OrderService.cancelOrder", () => {
 
   beforeEach(async () => {
     ctx = setup();
-    const order = await ctx.service.createOrder("user-1", {
+    const order = await ctx.service.createOrder("user-1", "cliente", {
       delivery_type: "retiro",
       items: [{ product_id: "p1", quantity: 3 }],
     });
@@ -442,7 +512,7 @@ describe("OrderService.cancelOrder", () => {
   it("cancela un pedido pendiente y repone el stock descontado", async () => {
     expect(ctx.productRepository.stockOf("p1")).toBe(5);
 
-    const order = await ctx.service.cancelOrder(orderId, "user-1");
+    const order = await ctx.service.cancelOrder(orderId, "user-1", "cliente");
 
     expect(order?.status).toBe("cancelado");
     expect(ctx.productRepository.stockOf("p1")).toBe(8);
@@ -451,19 +521,62 @@ describe("OrderService.cancelOrder", () => {
   it("rechaza cancelar un pedido que ya no esta pendiente, sin reponer stock", async () => {
     await ctx.service.changeStatus(orderId, "confirmado");
 
-    await expect(ctx.service.cancelOrder(orderId, "user-1")).rejects.toThrow(ValidationError);
+    await expect(ctx.service.cancelOrder(orderId, "user-1", "cliente")).rejects.toThrow(
+      ValidationError,
+    );
     expect(ctx.productRepository.stockOf("p1")).toBe(5);
     expect(ctx.orderRepository.orders.get(orderId)?.status).toBe("confirmado");
   });
 
   it("rechaza con ForbiddenError si el pedido es de otro cliente", async () => {
-    await expect(ctx.service.cancelOrder(orderId, "user-2")).rejects.toThrow(ForbiddenError);
+    await expect(ctx.service.cancelOrder(orderId, "user-2", "cliente")).rejects.toThrow(
+      ForbiddenError,
+    );
     expect(ctx.productRepository.stockOf("p1")).toBe(5);
     expect(ctx.orderRepository.orders.get(orderId)?.status).toBe("pendiente");
   });
 
   it("devuelve null si la orden no existe", async () => {
-    expect(await ctx.service.cancelOrder("order-inexistente", "user-1")).toBeNull();
+    expect(await ctx.service.cancelOrder("order-inexistente", "user-1", "cliente")).toBeNull();
+  });
+
+  // El owner no tiene perfil de cliente y puede cancelar pedidos ya avanzados.
+  it("el owner cancela un pedido en preparacion y repone el stock", async () => {
+    await ctx.service.changeStatus(orderId, "confirmado");
+    await ctx.service.changeStatus(orderId, "en_preparacion");
+
+    const order = await ctx.service.cancelOrder(orderId, "user-owner", "owner");
+
+    expect(order?.status).toBe("cancelado");
+    expect(ctx.productRepository.stockOf("p1")).toBe(8);
+  });
+
+  it("el owner no puede cancelar un pedido entregado, sin reponer stock", async () => {
+    const pasos: OrderStatus[] = [
+      "confirmado",
+      "en_preparacion",
+      "listo_para_retirar",
+      "entregado",
+    ];
+    for (const status of pasos) {
+      await ctx.service.changeStatus(orderId, status);
+    }
+
+    await expect(ctx.service.cancelOrder(orderId, "user-owner", "owner")).rejects.toThrow(
+      "No se puede cancelar un pedido ya entregado",
+    );
+    expect(ctx.productRepository.stockOf("p1")).toBe(5);
+    expect(ctx.orderRepository.orders.get(orderId)?.status).toBe("entregado");
+  });
+
+  // Cancelar dos veces repondria el stock dos veces.
+  it("el owner no puede cancelar un pedido ya cancelado, sin reponer stock otra vez", async () => {
+    await ctx.service.cancelOrder(orderId, "user-owner", "owner");
+
+    await expect(ctx.service.cancelOrder(orderId, "user-owner", "owner")).rejects.toThrow(
+      "El pedido ya está cancelado",
+    );
+    expect(ctx.productRepository.stockOf("p1")).toBe(8);
   });
 });
 
@@ -473,7 +586,7 @@ describe("OrderService.getById", () => {
 
   beforeEach(async () => {
     ctx = setup();
-    const order = await ctx.service.createOrder("user-1", {
+    const order = await ctx.service.createOrder("user-1", "cliente", {
       delivery_type: "retiro",
       items: [{ product_id: "p1", quantity: 1 }],
     });

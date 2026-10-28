@@ -19,7 +19,11 @@ export class UserService {
     return user ? this.toPublic(user) : null;
   }
 
-  async create(input: { email?: unknown; password?: unknown; role?: unknown }): Promise<PublicUser> {
+  async create(input: {
+    email?: unknown;
+    password?: unknown;
+    role?: unknown;
+  }): Promise<PublicUser> {
     const email = this.validateEmail(input.email);
     const password = this.validatePassword(input.password);
     const role = this.normalizeRole(input.role);

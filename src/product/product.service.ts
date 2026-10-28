@@ -5,6 +5,7 @@ import type { IBrandRepository } from "../brand/brand.repository.interface";
 import { ValidationError } from "../errors";
 
 const NAME_MAX_LENGTH = 100;
+const IMAGE_URL_ERROR = "La URL de la imagen debe comenzar con http:// o https://";
 
 export class ProductService {
   constructor(
@@ -37,6 +38,7 @@ export class ProductService {
   async create(input: {
     name?: unknown;
     description?: unknown;
+    image_url?: unknown;
     type?: unknown;
     price?: unknown;
     stock?: unknown;
@@ -45,6 +47,7 @@ export class ProductService {
   }): Promise<Product> {
     const name = this.validateName(input.name);
     const description = this.normalizeDescription(input.description);
+    const image_url = this.normalizeImageUrl(input.image_url);
     const type = this.validateType(input.type);
     const category_id = this.validateForeignId(input.category_id, "category_id");
     const brand_id = this.validateForeignId(input.brand_id, "brand_id");
@@ -54,6 +57,7 @@ export class ProductService {
     const toCreate: Omit<Product, "id"> = {
       name,
       description,
+      image_url,
       type,
       price,
       stock,
@@ -70,6 +74,7 @@ export class ProductService {
     input: {
       name?: unknown;
       description?: unknown;
+      image_url?: unknown;
       type?: unknown;
       price?: unknown;
       stock?: unknown;
@@ -90,6 +95,10 @@ export class ProductService {
 
     if (input.description !== undefined) {
       data.description = this.normalizeDescription(input.description);
+    }
+
+    if (input.image_url !== undefined) {
+      data.image_url = this.normalizeImageUrl(input.image_url);
     }
 
     if (input.category_id !== undefined) {
@@ -152,6 +161,24 @@ export class ProductService {
       throw new ValidationError("El campo 'description' debe ser texto");
     }
     return value;
+  }
+
+  // Opcional. Vacio o ausente => null. Si viene, debe ser un enlace http(s).
+  private normalizeImageUrl(value: unknown): string | null {
+    if (value === undefined || value === null) {
+      return null;
+    }
+    if (typeof value !== "string") {
+      throw new ValidationError(IMAGE_URL_ERROR);
+    }
+    const imageUrl = value.trim();
+    if (imageUrl.length === 0) {
+      return null;
+    }
+    if (!imageUrl.startsWith("http://") && !imageUrl.startsWith("https://")) {
+      throw new ValidationError(IMAGE_URL_ERROR);
+    }
+    return imageUrl;
   }
 
   private validateType(value: unknown): ProductType {

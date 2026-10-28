@@ -34,8 +34,9 @@ export class CustomerController {
 
   create = async (req: Request, res: Response): Promise<void> => {
     try {
-      const customer = await this.service.create(req.body);
-      res.status(201).json(customer);
+      // result = { customer, generated_password }
+      const result = await this.service.create(req.body);
+      res.status(201).json(result);
     } catch (error) {
       this.handleError(res, error);
     }

@@ -52,7 +52,11 @@ const openApiSpec = {
         type: "object" as const,
         properties: {
           id: { type: "string" as const },
-          user_id: { type: "string" as const },
+          user_id: {
+            type: "string" as const,
+            nullable: true,
+            description: "null para los clientes de local (sin cuenta web)",
+          },
           name: { type: "string" as const },
           government_id: {
             type: "string" as const,
@@ -67,7 +71,22 @@ const openApiSpec = {
           address: { type: "string" as const, nullable: true },
           created_at: { type: "string" as const, format: "date-time" },
         },
-        required: ["id", "user_id", "name", "tax_status", "created_at"],
+        required: ["id", "name", "tax_status", "created_at"],
+      },
+      CustomerWithEmail: {
+        allOf: [
+          { $ref: "#/components/schemas/Customer" },
+          {
+            type: "object" as const,
+            properties: {
+              email: {
+                type: "string" as const,
+                nullable: true,
+                description: "Email de la cuenta web; null si el cliente no tiene cuenta",
+              },
+            },
+          },
+        ],
       },
       Category: {
         type: "object" as const,
@@ -93,6 +112,12 @@ const openApiSpec = {
           id: { type: "string" as const },
           name: { type: "string" as const },
           description: { type: "string" as const, nullable: true },
+          image_url: {
+            type: "string" as const,
+            nullable: true,
+            example: "https://example.com/img/macbook-pro-14.jpg",
+            description: "URL de la imagen; null si el producto no tiene",
+          },
           type: { type: "string" as const, enum: ["stock", "encargo"] },
           price: {
             type: "number" as const,
@@ -119,24 +144,91 @@ const openApiSpec = {
           },
         ],
       },
-      CartItem: {
+      CartItemDetail: {
         type: "object" as const,
         properties: {
           id: { type: "string" as const },
           product_id: { type: "string" as const },
           quantity: { type: "integer" as const },
+          name: {
+            type: "string" as const,
+            nullable: true,
+            description: "null si el producto ya no existe",
+          },
+          type: {
+            type: "string" as const,
+            enum: ["stock", "encargo"],
+            nullable: true,
+            description: "null si el producto ya no existe",
+          },
+          unit_price: {
+            type: "number" as const,
+            nullable: true,
+            description: "null si es por encargo o no está disponible",
+          },
+          stock_available: {
+            type: "integer" as const,
+            nullable: true,
+            description: "null si es por encargo o no está disponible",
+          },
+          subtotal: {
+            type: "number" as const,
+            nullable: true,
+            description: "unit_price * quantity; null si no aplica",
+          },
+          available: {
+            type: "boolean" as const,
+            description: "false si el producto fue dado de baja o no existe",
+          },
+          exceeds_stock: {
+            type: "boolean" as const,
+            description: "true si es tipo stock y la cantidad supera el stock actual",
+          },
         },
-        required: ["id", "product_id", "quantity"],
+        required: [
+          "id",
+          "product_id",
+          "quantity",
+          "name",
+          "type",
+          "unit_price",
+          "stock_available",
+          "subtotal",
+          "available",
+          "exceeds_stock",
+        ],
       },
-      Cart: {
+      CartDetail: {
         type: "object" as const,
         properties: {
           id: { type: "string" as const },
           customer_id: { type: "string" as const },
-          items: { type: "array" as const, items: { $ref: "#/components/schemas/CartItem" } },
           updated_at: { type: "string" as const, format: "date-time" },
+          items: {
+            type: "array" as const,
+            items: { $ref: "#/components/schemas/CartItemDetail" },
+          },
+          item_count: {
+            type: "integer" as const,
+            description: "Suma de las cantidades de todos los items",
+          },
+          total: {
+            type: "number" as const,
+            description: "Suma de los subtotales de los items disponibles tipo stock",
+          },
+          has_encargo_items: { type: "boolean" as const },
+          has_unavailable_items: { type: "boolean" as const },
         },
-        required: ["id", "customer_id", "items", "updated_at"],
+        required: [
+          "id",
+          "customer_id",
+          "updated_at",
+          "items",
+          "item_count",
+          "total",
+          "has_encargo_items",
+          "has_unavailable_items",
+        ],
       },
       OrderItem: {
         type: "object" as const,
@@ -177,6 +269,42 @@ const openApiSpec = {
           items: { type: "array" as const, items: { $ref: "#/components/schemas/OrderItem" } },
         },
         required: ["id", "customer_id", "status", "delivery_type", "total", "created_at", "items"],
+      },
+      OrderCustomer: {
+        type: "object" as const,
+        description: "Datos del cliente que hizo el pedido. No incluye el email",
+        properties: {
+          id: { type: "string" as const },
+          name: { type: "string" as const },
+          phone: { type: "string" as const, nullable: true },
+          address: { type: "string" as const, nullable: true },
+          government_id: {
+            type: "string" as const,
+            nullable: true,
+            description: "CUIT/CUIL de 11 dígitos",
+          },
+          tax_status: {
+            type: "string" as const,
+            enum: ["consumidor_final", "responsable_inscripto", "monotributo", "exento"],
+          },
+        },
+        required: ["id", "name", "phone", "address", "government_id", "tax_status"],
+      },
+      OrderWithCustomer: {
+        allOf: [
+          { $ref: "#/components/schemas/Order" },
+          {
+            type: "object" as const,
+            properties: {
+              customer: {
+                allOf: [{ $ref: "#/components/schemas/OrderCustomer" }],
+                nullable: true,
+                description: "null si el cliente fue eliminado",
+              },
+            },
+            required: ["customer"],
+          },
+        ],
       },
       Error: {
         type: "object" as const,
@@ -541,7 +669,9 @@ const openApiSpec = {
       get: {
         tags: ["Customers"],
         summary: "Listar todos los clientes — Solo owner",
-        description: "Requiere autenticación y rol owner.",
+        description:
+          "Requiere autenticación y rol owner. Cada cliente incluye el email de su cuenta web, " +
+          "o null si es un cliente de local.",
         security: [{ bearerAuth: [] }],
         responses: {
           "200": {
@@ -550,7 +680,7 @@ const openApiSpec = {
               "application/json": {
                 schema: {
                   type: "array" as const,
-                  items: { $ref: "#/components/schemas/Customer" },
+                  items: { $ref: "#/components/schemas/CustomerWithEmail" },
                 },
               },
             },
@@ -693,9 +823,13 @@ const openApiSpec = {
     "/api/customer": {
       post: {
         tags: ["Customers"],
-        summary: "Crear un cliente",
+        summary: "Crear un cliente — Solo owner",
         description:
-          "Crea un perfil de cliente. Ruta sin guards (se usa internamente en el registro).",
+          "Requiere autenticación y rol owner. " +
+          "Sin email crea un cliente de local (user_id null). " +
+          "Con email crea además su cuenta web con rol 'cliente'; si no se envía password, " +
+          "el sistema genera una de 10 caracteres y la devuelve en generated_password.",
+        security: [{ bearerAuth: [] }],
         requestBody: {
           required: true,
           content: {
@@ -703,7 +837,6 @@ const openApiSpec = {
               schema: {
                 type: "object" as const,
                 properties: {
-                  user_id: { type: "string" as const },
                   name: { type: "string" as const },
                   government_id: { type: "string" as const, nullable: true },
                   tax_status: {
@@ -712,8 +845,22 @@ const openApiSpec = {
                   },
                   phone: { type: "string" as const, nullable: true },
                   address: { type: "string" as const, nullable: true },
+                  email: {
+                    type: "string" as const,
+                    description: "Opcional. Si viene, se crea también la cuenta web",
+                  },
+                  password: {
+                    type: "string" as const,
+                    description:
+                      "Opcional, mínimo 6 caracteres. Solo con email; si falta, se genera",
+                  },
+                  user_id: {
+                    type: "string" as const,
+                    description:
+                      "Opcional. Vincula el cliente a un usuario ya existente; no se combina con email",
+                  },
                 },
-                required: ["user_id", "name"],
+                required: ["name"],
               },
             },
           },
@@ -721,10 +868,38 @@ const openApiSpec = {
         responses: {
           "201": {
             description: "Cliente creado",
-            content: { "application/json": { schema: { $ref: "#/components/schemas/Customer" } } },
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object" as const,
+                  properties: {
+                    customer: { $ref: "#/components/schemas/Customer" },
+                    generated_password: {
+                      type: "string" as const,
+                      nullable: true,
+                      description:
+                        "Contraseña generada por el sistema; null si la envió el dueño o no hay cuenta",
+                    },
+                  },
+                  required: ["customer", "generated_password"],
+                },
+              },
+            },
           },
           "400": {
             description: "Datos inválidos",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+          },
+          "401": {
+            description: "No autenticado",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+          },
+          "403": {
+            description: "No autorizado (requiere rol owner)",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+          },
+          "409": {
+            description: "Ya existe una cuenta con ese email",
             content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
           },
           "500": {
@@ -1179,6 +1354,13 @@ const openApiSpec = {
                 properties: {
                   name: { type: "string" as const },
                   description: { type: "string" as const, nullable: true },
+                  image_url: {
+                    type: "string" as const,
+                    nullable: true,
+                    example: "https://example.com/img/macbook-pro-14.jpg",
+                    description:
+                      "Opcional. Debe comenzar con http:// o https://. null o vacío quita la imagen",
+                  },
                   type: { type: "string" as const, enum: ["stock", "encargo"] },
                   price: { type: "number" as const, nullable: true },
                   stock: { type: "integer" as const },
@@ -1265,6 +1447,12 @@ const openApiSpec = {
                 properties: {
                   name: { type: "string" as const },
                   description: { type: "string" as const, nullable: true },
+                  image_url: {
+                    type: "string" as const,
+                    nullable: true,
+                    example: "https://example.com/img/macbook-pro-14.jpg",
+                    description: "Opcional. Debe comenzar con http:// o https://",
+                  },
                   type: { type: "string" as const, enum: ["stock", "encargo"] },
                   price: {
                     type: "number" as const,
@@ -1320,7 +1508,9 @@ const openApiSpec = {
         responses: {
           "200": {
             description: "Carrito del cliente",
-            content: { "application/json": { schema: { $ref: "#/components/schemas/Cart" } } },
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/CartDetail" } },
+            },
           },
           "400": {
             description: "Error de validación",
@@ -1390,7 +1580,9 @@ const openApiSpec = {
         responses: {
           "200": {
             description: "Carrito actualizado con el nuevo item",
-            content: { "application/json": { schema: { $ref: "#/components/schemas/Cart" } } },
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/CartDetail" } },
+            },
           },
           "400": {
             description: "Datos inválidos o stock insuficiente",
@@ -1431,7 +1623,9 @@ const openApiSpec = {
         responses: {
           "200": {
             description: "Carrito actualizado sin el item eliminado",
-            content: { "application/json": { schema: { $ref: "#/components/schemas/Cart" } } },
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/CartDetail" } },
+            },
           },
           "400": {
             description: "Error de validación",
@@ -1457,10 +1651,13 @@ const openApiSpec = {
     "/api/order": {
       post: {
         tags: ["Orders"],
-        summary: "Crear un pedido — Solo cliente",
+        summary: "Crear un pedido — Cliente u owner",
         description:
-          "Requiere autenticación y rol cliente. " +
-          "Los items pueden venir en el body o tomarse automáticamente del carrito del cliente. " +
+          "Requiere autenticación (cliente u owner). " +
+          "El cliente crea el pedido a su nombre: los items pueden venir en el body o tomarse " +
+          "automáticamente de su carrito. " +
+          "El owner lo crea a nombre de un cliente: customer_id e items son obligatorios y no se " +
+          "toca el carrito de ese cliente. " +
           "delivery_type debe ser 'retiro' o 'envio' (si es envio, delivery_address es obligatorio). " +
           "Se descuenta el stock de los productos tipo 'stock' y si los items vinieron del carrito, se vacía.",
         security: [{ bearerAuth: [] }],
@@ -1471,6 +1668,12 @@ const openApiSpec = {
               schema: {
                 type: "object" as const,
                 properties: {
+                  customer_id: {
+                    type: "string" as const,
+                    description:
+                      "Cliente a nombre de quien se crea el pedido. Obligatorio para el owner; " +
+                      "ignorado para el cliente (siempre se usa su propio perfil)",
+                  },
                   delivery_type: { type: "string" as const, enum: ["retiro", "envio"] },
                   delivery_address: {
                     type: "string" as const,
@@ -1479,7 +1682,9 @@ const openApiSpec = {
                   },
                   items: {
                     type: "array" as const,
-                    description: "Opcional. Si no se envía, se toman los items del carrito.",
+                    description:
+                      "Opcional para el cliente (si no se envía, se toman los items del carrito). " +
+                      "Obligatorio para el owner.",
                     items: {
                       type: "object" as const,
                       properties: {
@@ -1498,18 +1703,18 @@ const openApiSpec = {
         responses: {
           "201": {
             description: "Pedido creado",
-            content: { "application/json": { schema: { $ref: "#/components/schemas/Order" } } },
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/OrderWithCustomer" } },
+            },
           },
           "400": {
-            description: "Datos inválidos o stock insuficiente",
+            description:
+              "Datos inválidos o stock insuficiente. Para el owner: falta customer_id, " +
+              "el cliente indicado no existe o faltan los items",
             content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
           },
           "401": {
             description: "No autenticado",
-            content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
-          },
-          "403": {
-            description: "No autorizado (requiere rol cliente)",
             content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
           },
           "500": {
@@ -1532,7 +1737,10 @@ const openApiSpec = {
             description: "Lista de pedidos del cliente",
             content: {
               "application/json": {
-                schema: { type: "array" as const, items: { $ref: "#/components/schemas/Order" } },
+                schema: {
+                  type: "array" as const,
+                  items: { $ref: "#/components/schemas/OrderWithCustomer" },
+                },
               },
             },
           },
@@ -1587,7 +1795,10 @@ const openApiSpec = {
             description: "Lista de pedidos",
             content: {
               "application/json": {
-                schema: { type: "array" as const, items: { $ref: "#/components/schemas/Order" } },
+                schema: {
+                  type: "array" as const,
+                  items: { $ref: "#/components/schemas/OrderWithCustomer" },
+                },
               },
             },
           },
@@ -1619,7 +1830,9 @@ const openApiSpec = {
         responses: {
           "200": {
             description: "Pedido encontrado",
-            content: { "application/json": { schema: { $ref: "#/components/schemas/Order" } } },
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/OrderWithCustomer" } },
+            },
           },
           "401": {
             description: "No autenticado",
@@ -1699,11 +1912,13 @@ const openApiSpec = {
     "/api/order/{id}/cancel": {
       put: {
         tags: ["Orders"],
-        summary: "Cancelar un pedido propio si está pendiente — Solo cliente",
+        summary: "Cancelar un pedido — Cliente (propio y pendiente) u owner",
         description:
-          "Requiere autenticación y rol cliente. " +
-          "Solo se puede cancelar un pedido propio que esté en estado 'pendiente'. " +
-          "Intentar cancelar el pedido de otro cliente devuelve 403.",
+          "Requiere autenticación (cliente u owner). " +
+          "El cliente solo puede cancelar un pedido propio que esté en estado 'pendiente'; " +
+          "intentar cancelar el pedido de otro cliente devuelve 403. " +
+          "El owner puede cancelar cualquier pedido que no esté 'entregado' ni 'cancelado'. " +
+          "En ambos casos se repone el stock de los productos tipo 'stock'.",
         security: [{ bearerAuth: [] }],
         parameters: [
           { name: "id", in: "path" as const, required: true, schema: { type: "string" as const } },
@@ -1714,7 +1929,9 @@ const openApiSpec = {
             content: { "application/json": { schema: { $ref: "#/components/schemas/Order" } } },
           },
           "400": {
-            description: "No se puede cancelar (el pedido no está pendiente)",
+            description:
+              "No se puede cancelar: para el cliente, el pedido no está pendiente; " +
+              "para el owner, ya está entregado o cancelado",
             content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
           },
           "401": {
@@ -1722,7 +1939,7 @@ const openApiSpec = {
             content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
           },
           "403": {
-            description: "No autorizado (requiere rol cliente, o el pedido es de otro cliente)",
+            description: "El pedido es de otro cliente",
             content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
           },
           "404": {

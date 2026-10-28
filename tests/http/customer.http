@@ -43,6 +43,28 @@ Authorization: Bearer {{loginOwner.response.body.$.token}}
   "name": "Juan Perez"
 }
 
+### 3.1 Crear cliente de local, sin cuenta web (owner) -> 201 Created
+# Responde { customer, generated_password }: user_id y generated_password en null.
+POST {{host}}/api/customer
+Content-Type: application/json
+Authorization: Bearer {{loginOwner.response.body.$.token}}
+
+{
+  "name": "Maria Gomez",
+  "phone": "3411234567"
+}
+
+### 3.2 Crear cliente con cuenta web y contraseña generada (owner) -> 201 Created
+# Sin password: el sistema genera una y la devuelve en generated_password.
+POST {{host}}/api/customer
+Content-Type: application/json
+Authorization: Bearer {{loginOwner.response.body.$.token}}
+
+{
+  "name": "Carlos Diaz",
+  "email": "carlos.diaz.{{$timestamp}}@example.com"
+}
+
 ### 4. Crear cliente sin token -> 401 No autenticado
 POST {{host}}/api/customer
 Content-Type: application/json
@@ -71,11 +93,11 @@ GET {{host}}/api/customers
 Authorization: Bearer {{loginCliente.response.body.$.token}}
 
 ### 8. Ver un cliente especifico, cualquier logueado -> 200 OK
-GET {{host}}/api/customer/{{createCustomer.response.body.$.id}}
+GET {{host}}/api/customer/{{createCustomer.response.body.$.customer.id}}
 Authorization: Bearer {{loginCliente.response.body.$.token}}
 
 ### 9. Editar el propio perfil (cliente autenticado) -> 200 OK
-PUT {{host}}/api/customer/{{createCustomer.response.body.$.id}}
+PUT {{host}}/api/customer/{{createCustomer.response.body.$.customer.id}}
 Content-Type: application/json
 Authorization: Bearer {{loginCliente.response.body.$.token}}
 
@@ -95,13 +117,13 @@ Authorization: Bearer {{loginCliente.response.body.$.token}}
 }
 
 ### 11. Eliminar cliente sin ser owner -> 403 No autorizado
-DELETE {{host}}/api/customer/{{createCustomer.response.body.$.id}}
+DELETE {{host}}/api/customer/{{createCustomer.response.body.$.customer.id}}
 Authorization: Bearer {{loginCliente.response.body.$.token}}
 
 ### 12. Eliminar cliente (owner) -> 204 No Content
-DELETE {{host}}/api/customer/{{createCustomer.response.body.$.id}}
+DELETE {{host}}/api/customer/{{createCustomer.response.body.$.customer.id}}
 Authorization: Bearer {{loginOwner.response.body.$.token}}
 
 ### 13. Eliminar de nuevo el mismo cliente -> 404 Not Found
-DELETE {{host}}/api/customer/{{createCustomer.response.body.$.id}}
+DELETE {{host}}/api/customer/{{createCustomer.response.body.$.customer.id}}
 Authorization: Bearer {{loginOwner.response.body.$.token}}

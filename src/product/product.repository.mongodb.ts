@@ -7,6 +7,7 @@ type ProductDoc = {
   _id: string;
   name: string;
   description?: string | null;
+  image_url?: string | null;
   type: ProductType;
   price?: number | null;
   stock?: number;
@@ -28,6 +29,7 @@ export class ProductRepositoryMongoDB implements IProductRepository {
       _id: newId,
       name: data.name,
       description: data.description,
+      image_url: data.image_url,
       type: data.type,
       price: data.price,
       stock: data.stock,
@@ -44,6 +46,16 @@ export class ProductRepositoryMongoDB implements IProductRepository {
       is_active: true,
     });
     return doc ? this.toEntity(doc) : null;
+  }
+
+  // Unlike getById, this does NOT filter by is_active: the cart needs to see
+  // discontinued products to flag them as unavailable.
+  async getByIds(ids: string[]): Promise<Product[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+    const docs = await this.collection.find({ _id: { $in: ids } }).toArray();
+    return docs.map((doc) => this.toEntity(doc));
   }
 
   // getAll arma el query dinamicamente: siempre is_active:true, y suma filtros si vienen.
@@ -94,6 +106,8 @@ export class ProductRepositoryMongoDB implements IProductRepository {
       id: doc._id,
       name: doc.name,
       description: doc.description ?? null,
+      // Los productos cargados antes de este campo no lo tienen: se leen como null.
+      image_url: doc.image_url ?? null,
       type: doc.type,
       price: doc.price ?? null,
       stock: doc.stock ?? 0,

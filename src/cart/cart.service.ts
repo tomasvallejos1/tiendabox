@@ -1,4 +1,4 @@
-import { Cart } from "./cart.entity";
+import { Cart, CartDetail, CartItemDetail } from "./cart.entity";
 import { ICartRepository } from "./cart.repository.interface";
 import { IProductRepository } from "../product/product.repository.interface";
 import { ICustomerRepository } from "../customer/customer.repository.interface";
@@ -22,16 +22,16 @@ export class CartService {
   }
 
   // Devuelve el carrito del cliente; si no existe, lo crea vacio.
-  async getCart(userId: string): Promise<Cart> {
+  async getCart(userId: string): Promise<CartDetail> {
     const customerId = await this.resolveCustomerId(userId);
     const cart = await this.cartRepository.getByCustomerId(customerId);
     if (cart) {
-      return cart;
+      return this.toDetail(cart);
     }
-    return this.cartRepository.createForCustomer(customerId);
+    return this.toDetail(await this.cartRepository.createForCustomer(customerId));
   }
 
-  async addItem(userId: string, productId: string, quantity: number): Promise<Cart> {
+  async addItem(userId: string, productId: string, quantity: number): Promise<CartDetail> {
     const customerId = await this.resolveCustomerId(userId);
 
     if (!Number.isInteger(quantity) || quantity <= 0) {
@@ -66,10 +66,10 @@ export class CartService {
     }
 
     // Devuelve el carrito actualizado.
-    return (await this.cartRepository.getByCustomerId(customerId))!;
+    return this.toDetail((await this.cartRepository.getByCustomerId(customerId))!);
   }
 
-  async removeItem(userId: string, productId: string): Promise<Cart> {
+  async removeItem(userId: string, productId: string): Promise<CartDetail> {
     const customerId = await this.resolveCustomerId(userId);
     const cart = await this.cartRepository.getByCustomerId(customerId);
     if (!cart) {
@@ -77,7 +77,7 @@ export class CartService {
     }
 
     await this.cartRepository.removeItem(cart.id, productId);
-    return (await this.cartRepository.getByCustomerId(customerId))!;
+    return this.toDetail((await this.cartRepository.getByCustomerId(customerId))!);
   }
 
   async clear(userId: string): Promise<void> {
@@ -96,5 +96,69 @@ export class CartService {
       return cart;
     }
     return this.cartRepository.createForCustomer(customerId);
+  }
+
+  // Enriches the cart with product data. Cart (Postgres) and products (Mongo) cannot be
+  // joined, so all products are fetched in a single getByIds query (never getById in a loop).
+  private async toDetail(cart: Cart): Promise<CartDetail> {
+    const ids = [...new Set(cart.items.map((item) => item.product_id))];
+    const products = await this.productRepository.getByIds(ids);
+    const productsById = new Map(products.map((product) => [product.id, product]));
+
+    const items: CartItemDetail[] = cart.items.map((item) => {
+      const product = productsById.get(item.product_id);
+      const base = {
+        id: item.id,
+        product_id: item.product_id,
+        quantity: item.quantity,
+        name: product?.name ?? null,
+        type: product?.type ?? null,
+      };
+
+      // Missing or discontinued product: no price or stock info.
+      if (!product || !product.is_active) {
+        return {
+          ...base,
+          unit_price: null,
+          stock_available: null,
+          subtotal: null,
+          available: false,
+          exceeds_stock: false,
+        };
+      }
+
+      // "encargo" products have no price or stock until quoted.
+      if (product.type === "encargo") {
+        return {
+          ...base,
+          unit_price: null,
+          stock_available: null,
+          subtotal: null,
+          available: true,
+          exceeds_stock: false,
+        };
+      }
+
+      return {
+        ...base,
+        unit_price: product.price,
+        stock_available: product.stock,
+        subtotal: product.price !== null ? product.price * item.quantity : null,
+        available: true,
+        exceeds_stock: item.quantity > product.stock,
+      };
+    });
+
+    return {
+      id: cart.id,
+      customer_id: cart.customer_id,
+      updated_at: cart.updated_at,
+      items,
+      item_count: items.reduce((sum, item) => sum + item.quantity, 0),
+      // Only available "stock" items carry a subtotal, so only they add to the total.
+      total: items.reduce((sum, item) => sum + (item.subtotal ?? 0), 0),
+      has_encargo_items: items.some((item) => item.available && item.type === "encargo"),
+      has_unavailable_items: items.some((item) => !item.available),
+    };
   }
 }

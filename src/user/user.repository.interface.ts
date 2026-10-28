@@ -4,6 +4,8 @@ import { User } from "./user.entity";
 export interface IUserRepository {
   create(data: Omit<User, "id" | "created_at">): Promise<User>;
   getById(id: string): Promise<User | null>;
+  // Busqueda por lote; los ids inexistentes simplemente no aparecen en el resultado.
+  getByIds(ids: string[]): Promise<User[]>;
   getByEmail(email: string): Promise<User | null>;
   getAll(): Promise<User[]>;
   update(id: string, data: Partial<Omit<User, "id" | "created_at">>): Promise<User | null>;

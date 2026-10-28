@@ -7,11 +7,13 @@ import prettierConfig from "eslint-config-prettier";
 // Las reglas de formato se delegan a Prettier (eslint-config-prettier las desactiva).
 export default [
   {
-    ignores: ["dist/**", "node_modules/**"],
+    ignores: ["dist/**", "node_modules/**", "coverage/**"],
   },
   js.configs.recommended,
   {
-    files: ["src/**/*.ts"],
+    // test/ usa el mismo parser y reglas que src/; los globals de Jest no molestan
+    // porque no-undef esta desactivado.
+    files: ["src/**/*.ts", "test/**/*.ts"],
     languageOptions: {
       parser: tsParser,
       parserOptions: {
