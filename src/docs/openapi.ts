@@ -62,7 +62,7 @@ const openApiSpec = {
             type: "string" as const,
             nullable: true,
             description:
-              "DNI (7 u 8 dígitos) o CUIT/CUIL (11 dígitos) según tax_status; null si no se cargó",
+              "Opcional: consumidor_final admite DNI de 7 u 8 dígitos o CUIT/CUIL de 11; las otras condiciones fiscales requieren CUIT de 11 dígitos numéricos. Omitido, null o vacío se trata como null.",
           },
           tax_status: {
             type: "string" as const,
@@ -283,7 +283,7 @@ const openApiSpec = {
             type: "string" as const,
             nullable: true,
             description:
-              "DNI (7 u 8 dígitos) o CUIT/CUIL (11 dígitos) según tax_status; null si no se cargó",
+              "Opcional: consumidor_final admite DNI de 7 u 8 dígitos o CUIT/CUIL de 11; las otras condiciones fiscales requieren CUIT de 11 dígitos numéricos. Omitido, null o vacío se trata como null.",
           },
           tax_status: {
             type: "string" as const,

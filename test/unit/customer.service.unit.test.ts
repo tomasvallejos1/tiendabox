@@ -3,7 +3,7 @@ import { Customer } from "../../src/customer/customer.entity";
 import { ICustomerRepository } from "../../src/customer/customer.repository.interface";
 import { User } from "../../src/user/user.entity";
 import { IUserRepository } from "../../src/user/user.repository.interface";
-import { ConflictError } from "../../src/errors";
+import { ConflictError, ValidationError } from "../../src/errors";
 import { validCustomer } from "../fixtures";
 
 // Fake en memoria de ICustomerRepository. failOnCreate simula una caida de la base
@@ -11,6 +11,7 @@ import { validCustomer } from "../fixtures";
 class FakeCustomerRepository implements ICustomerRepository {
   readonly customers: Customer[] = [];
   failOnCreate = false;
+  getByIdCalls = 0;
 
   async create(data: Omit<Customer, "id" | "created_at">): Promise<Customer> {
     if (this.failOnCreate) {
@@ -26,6 +27,7 @@ class FakeCustomerRepository implements ICustomerRepository {
   }
 
   async getById(id: string): Promise<Customer | null> {
+    this.getByIdCalls++;
     return this.customers.find((customer) => customer.id === id) ?? null;
   }
 
@@ -45,7 +47,7 @@ class FakeCustomerRepository implements ICustomerRepository {
     id: string,
     data: Partial<Omit<Customer, "id" | "user_id" | "created_at">>,
   ): Promise<Customer | null> {
-    const customer = this.customers.find((c) => c.id === id);
+    const customer = this.customers.find((customer) => customer.id === id);
     if (!customer) return null;
     Object.assign(customer, data);
     return customer;
@@ -113,6 +115,84 @@ describe("CustomerService", () => {
   });
 
   describe("create", () => {
+    it.each(["1234567", "12345678", "20123456789"])(
+      "consumidor final acepta el documento %s",
+      async (government_id) => {
+        const result = await service.create({
+          name: "Maria Gomez",
+          tax_status: "consumidor_final",
+          government_id,
+        });
+
+        expect(result.customer.government_id).toBe(government_id);
+      },
+    );
+
+    it.each(["123456789", "1234567890", "123456789012"])(
+      "consumidor final rechaza el documento %s",
+      async (government_id) => {
+        await expect(
+          service.create({ name: "Maria Gomez", tax_status: "consumidor_final", government_id }),
+        ).rejects.toThrow(
+          new ValidationError("El documento debe ser un DNI de 7 u 8 dígitos o un CUIT/CUIL de 11"),
+        );
+        expect(customerRepository.customers).toHaveLength(0);
+      },
+    );
+
+    it.each(["responsable_inscripto", "monotributo", "exento"])(
+      "%s acepta CUIT de 11 digitos y rechaza DNI de 8",
+      async (tax_status) => {
+        const result = await service.create({
+          name: "Maria Gomez",
+          tax_status,
+          government_id: "20123456789",
+        });
+
+        expect(result.customer.government_id).toBe("20123456789");
+        await expect(
+          service.create({ name: "Maria Gomez", tax_status, government_id: "12345678" }),
+        ).rejects.toThrow(new ValidationError("El CUIT debe tener 11 dígitos numéricos"));
+        expect(customerRepository.customers).toHaveLength(1);
+      },
+    );
+
+    describe.each(["consumidor_final", "responsable_inscripto", "monotributo", "exento"])(
+      "documento con condicion fiscal %s",
+      (tax_status) => {
+        it.each([undefined, null, "", "   "])(
+          "normaliza el documento opcional %p a null",
+          async (government_id) => {
+            const result = await service.create({ name: "Maria Gomez", tax_status, government_id });
+
+            expect(result.customer.government_id).toBeNull();
+          },
+        );
+
+        it.each(["abcdefgh", "20abcdefgh9", "12.345.678", "20-12345678-9"])(
+          "rechaza letras y separadores en %s",
+          async (government_id) => {
+            const message =
+              tax_status === "consumidor_final"
+                ? "El documento debe ser un DNI de 7 u 8 dígitos o un CUIT/CUIL de 11"
+                : "El CUIT debe tener 11 dígitos numéricos";
+
+            await expect(
+              service.create({ name: "Maria Gomez", tax_status, government_id }),
+            ).rejects.toThrow(new ValidationError(message));
+            expect(customerRepository.customers).toHaveLength(0);
+          },
+        );
+      },
+    );
+
+    it("sin condicion fiscal acepta DNI y usa consumidor_final", async () => {
+      const result = await service.create({ name: "Maria Gomez", government_id: "12345678" });
+
+      expect(result.customer.tax_status).toBe("consumidor_final");
+      expect(result.customer.government_id).toBe("12345678");
+    });
+
     it("sin email crea un cliente de local: user_id null y ninguna cuenta", async () => {
       const result = await service.create({ name: "Maria Gomez", phone: "3411234567" });
 
@@ -170,6 +250,110 @@ describe("CustomerService", () => {
       ).rejects.toThrow("fallo simulado al crear el cliente");
       expect(userRepository.users).toHaveLength(0);
     });
+  });
+
+  describe("update", () => {
+    it.each([
+      {
+        tax_status: "consumidor_final",
+        government_id: "12345678",
+        input: { tax_status: "monotributo" },
+      },
+      {
+        tax_status: "responsable_inscripto",
+        government_id: "20123456789",
+        input: { government_id: "12345678" },
+      },
+    ])("rechaza la combinacion final al enviar solo $input", async (testCase) => {
+      const customer = {
+        ...validCustomer,
+        id: "cus-1",
+        tax_status: testCase.tax_status,
+        government_id: testCase.government_id,
+      };
+      customerRepository.customers.push(customer);
+
+      await expect(service.update(customer.id, testCase.input, "owner-1", "owner")).rejects.toThrow(
+        new ValidationError("El CUIT debe tener 11 dígitos numéricos"),
+      );
+      expect(customerRepository.customers[0]).toEqual({
+        ...validCustomer,
+        id: customer.id,
+        tax_status: testCase.tax_status,
+        government_id: testCase.government_id,
+      });
+      expect(customerRepository.getByIdCalls).toBe(1);
+    });
+
+    it.each([
+      { tax_status: "monotributo", government_id: "20123456789" },
+      { tax_status: "responsable_inscripto", government_id: "20123456789" },
+      { tax_status: "consumidor_final", government_id: "1234567" },
+    ])("acepta cambiar ambos campos a $tax_status y $government_id", async (input) => {
+      customerRepository.customers.push({
+        ...validCustomer,
+        id: "cus-1",
+        government_id: "12345678",
+      });
+
+      const result = await service.update("cus-1", input, "owner-1", "owner");
+
+      expect(result).toEqual({ ...validCustomer, id: "cus-1", ...input });
+      expect(customerRepository.getByIdCalls).toBe(1);
+    });
+
+    it.each([null, ""])("permite borrar el documento con %p", async (government_id) => {
+      customerRepository.customers.push({
+        ...validCustomer,
+        id: "cus-1",
+        tax_status: "responsable_inscripto",
+        government_id: "20123456789",
+      });
+
+      const result = await service.update("cus-1", { government_id }, "owner-1", "owner");
+
+      expect(result?.government_id).toBeNull();
+      expect(result?.tax_status).toBe("responsable_inscripto");
+    });
+
+    it("permite cambiar solo la condicion fiscal si el documento guardado es valido", async () => {
+      customerRepository.customers.push({
+        ...validCustomer,
+        id: "cus-1",
+        government_id: "20123456789",
+      });
+
+      const result = await service.update(
+        "cus-1",
+        { tax_status: "monotributo" },
+        "owner-1",
+        "owner",
+      );
+
+      expect(result?.tax_status).toBe("monotributo");
+      expect(result?.government_id).toBe("20123456789");
+    });
+
+    it.each([
+      { tax_status: "monotributo" },
+      { government_id: "12345678" },
+      { tax_status: "monotributo", government_id: "20123456789" },
+    ])("devuelve null si el cliente no existe al cambiar %p", async (input) => {
+      await expect(service.update("missing", input, "owner-1", "owner")).resolves.toBeNull();
+      expect(customerRepository.getByIdCalls).toBe(1);
+    });
+
+    it.each([{ name: "Maria Gomez" }, { phone: "3411234567" }, { address: "San Martin 123" }])(
+      "no consulta el cliente antes de actualizar %p",
+      async (input) => {
+        customerRepository.customers.push({ ...validCustomer, id: "cus-1" });
+
+        const result = await service.update("cus-1", input, "owner-1", "owner");
+
+        expect(result).toEqual({ ...validCustomer, id: "cus-1", ...input });
+        expect(customerRepository.getByIdCalls).toBe(0);
+      },
+    );
   });
 
   describe("getAll", () => {
