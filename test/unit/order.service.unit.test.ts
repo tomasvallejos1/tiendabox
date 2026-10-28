@@ -194,7 +194,7 @@ class FakeCustomerRepository implements ICustomerRepository {
 
 // Escenario base compartido: dos clientes (user-1 -> cus-1, user-2 -> cus-2),
 // dos productos de stock y uno por encargo.
-function setup() {
+function setup(customerOverrides: Partial<Customer> = {}) {
   const productRepository = new FakeProductRepository(
     new Map<string, Product>([
       ["p1", { ...validProduct, id: "p1", name: "Teclado", stock: 8, price: 100 }],
@@ -215,7 +215,13 @@ function setup() {
   const orderRepository = new FakeOrderRepository();
   const cartRepository = new FakeCartRepository();
   const customerRepository = new FakeCustomerRepository([
-    { ...validCustomer, id: "cus-1", user_id: "user-1" },
+    {
+      ...validCustomer,
+      id: "cus-1",
+      user_id: "user-1",
+      phone: "+54 11 1234 5678",
+      ...customerOverrides,
+    },
     { ...validCustomer, id: "cus-2", user_id: "user-2" },
   ]);
   const service = new OrderService(
@@ -235,6 +241,106 @@ describe("OrderService.createOrder", () => {
 
   beforeEach(() => {
     ctx = setup();
+  });
+
+  it.each([
+    { phone: null, productId: "p1", scenario: "sin telefono y carrito solo stock" },
+    { phone: null, productId: "p-encargo", scenario: "sin telefono y carrito con encargo" },
+    { phone: "   ", productId: "p1", scenario: "con telefono de solo espacios" },
+    { phone: "", productId: "p1", scenario: "con telefono vacio" },
+    { phone: " +()- abc ", productId: "p1", scenario: "con telefono sin digitos" },
+  ])(
+    "rechaza al cliente $scenario sin crear pedido ni vaciar carrito",
+    async ({ phone, productId }) => {
+      ctx = setup({ phone });
+      const cart = await ctx.cartRepository.createForCustomer("cus-1");
+      await ctx.cartRepository.addItem(cart.id, "p1", 1);
+      await ctx.cartRepository.addItem(cart.id, productId, 1);
+      const originalItems = cart.items.map((item) => ({ ...item }));
+
+      const creation = ctx.service.createOrder("user-1", "cliente", { delivery_type: "retiro" });
+
+      await expect(creation).rejects.toThrow(ValidationError);
+      await expect(creation).rejects.toThrow(
+        "Completá tu teléfono en Mi perfil para poder confirmar el pedido",
+      );
+      expect(ctx.orderRepository.orders.size).toBe(0);
+      expect(ctx.cartRepository.carts.get(cart.id)?.items).toEqual(originalItems);
+      expect(ctx.productRepository.stockOf("p1")).toBe(8);
+    },
+  );
+
+  it.each([" 1 ", "+54 11 1234 5678"])(
+    "crea el pedido del cliente con telefono '%s' sin exigir documento ni condicion fiscal",
+    async (phone) => {
+      ctx = setup({ phone, government_id: null, tax_status: "" });
+      const cart = await ctx.cartRepository.createForCustomer("cus-1");
+      await ctx.cartRepository.addItem(cart.id, "p1", 1);
+      await ctx.cartRepository.addItem(cart.id, "p-encargo", 1);
+
+      const order = await ctx.service.createOrder("user-1", "cliente", {
+        delivery_type: "retiro",
+      });
+
+      expect(ctx.orderRepository.orders.get(order.id)).toBeDefined();
+      expect(order.customer?.phone).toBe(phone);
+      expect(order.items).toHaveLength(2);
+      expect(ctx.cartRepository.carts.get(cart.id)?.items).toEqual([]);
+    },
+  );
+
+  it("el owner crea un pedido solo stock para un cliente sin telefono", async () => {
+    ctx = setup({ phone: null });
+
+    const order = await ctx.service.createOrder("user-owner", "owner", {
+      customer_id: "cus-1",
+      delivery_type: "retiro",
+      items: [{ product_id: "p1", quantity: 1 }],
+    });
+
+    expect(ctx.orderRepository.orders.get(order.id)).toBeDefined();
+    expect(order.customer?.phone).toBeNull();
+    expect(ctx.productRepository.stockOf("p1")).toBe(7);
+  });
+
+  it.each([null, "   ", " +()- abc "])(
+    "rechaza al owner con encargo y telefono %p sin crear pedido ni vaciar carrito",
+    async (phone) => {
+      ctx = setup({ phone });
+      const cart = await ctx.cartRepository.createForCustomer("cus-1");
+      await ctx.cartRepository.addItem(cart.id, "p2", 1);
+      const originalItems = cart.items.map((item) => ({ ...item }));
+
+      const creation = ctx.service.createOrder("user-owner", "owner", {
+        customer_id: "cus-1",
+        delivery_type: "retiro",
+        items: [
+          { product_id: "p1", quantity: 1 },
+          { product_id: "p-encargo", quantity: 1 },
+        ],
+      });
+
+      await expect(creation).rejects.toThrow(ValidationError);
+      await expect(creation).rejects.toThrow(
+        "El cliente no tiene teléfono cargado y el pedido incluye productos por encargo, que se cotizan por WhatsApp",
+      );
+      expect(ctx.orderRepository.orders.size).toBe(0);
+      expect(ctx.cartRepository.carts.get(cart.id)?.items).toEqual(originalItems);
+      expect(ctx.productRepository.stockOf("p1")).toBe(8);
+      expect(ctx.productRepository.stockOf("p2")).toBe(4);
+    },
+  );
+
+  it("el owner crea un pedido con encargo para un cliente con telefono", async () => {
+    const order = await ctx.service.createOrder("user-owner", "owner", {
+      customer_id: "cus-1",
+      delivery_type: "retiro",
+      items: [{ product_id: "p-encargo", quantity: 1 }],
+    });
+
+    expect(ctx.orderRepository.orders.get(order.id)).toBeDefined();
+    expect(order.customer?.phone).toBe("+54 11 1234 5678");
+    expect(order.items[0]?.type).toBe("encargo");
   });
 
   // Regresion: dos items del mismo producto pasaban la validacion por separado y
