@@ -3,6 +3,7 @@ import { IOrderRepository } from "./order.repository.interface";
 import { IProductRepository } from "../product/product.repository.interface";
 import { ICartRepository } from "../cart/cart.repository.interface";
 import { ICustomerRepository } from "../customer/customer.repository.interface";
+import { Customer } from "../customer/customer.entity";
 import { ValidationError, ForbiddenError } from "../errors";
 
 // Logica de negocio de pedidos. Valida productos, stock, y delivery.
@@ -80,13 +81,14 @@ export class OrderService {
   ): Promise<OrderWithCustomer> {
     const isOwner = role === "owner";
     let customerId: string;
+    let customer: Customer | null = null;
 
     if (isOwner) {
       // El owner no tiene perfil de cliente: el pedido va a nombre del customer_id indicado.
       if (typeof input.customer_id !== "string" || input.customer_id.trim().length === 0) {
         throw new ValidationError("El campo 'customer_id' es obligatorio");
       }
-      const customer = await this.customerRepository.getById(input.customer_id.trim());
+      customer = await this.customerRepository.getById(input.customer_id.trim());
       if (!customer) {
         throw new ValidationError("El cliente indicado no existe");
       }
@@ -193,6 +195,17 @@ export class OrderService {
         });
       }
     }
+
+    // Recuperar el perfil si solo se resolvio su id (cliente web).
+    customer ??= await this.customerRepository.getById(customerId);
+    if (!customer) {
+      throw new ValidationError("No existe un perfil de cliente para este usuario");
+    }
+    this.assertCanBeContacted(
+      customer,
+      isOwner,
+      orderItems.some((item) => item.type === "encargo"),
+    );
 
     // 5. Descontar stock de productos tipo stock con la operacion atomica del repo.
     // La validacion del paso 4 es solo para dar un mensaje de error util: la
@@ -331,6 +344,21 @@ export class OrderService {
     }
 
     return this.orderRepository.updateStatus(orderId, "cancelado");
+  }
+
+  // Los pedidos web siempre requieren telefono; en mostrador, solo los encargos
+  // que se cotizan por WhatsApp. Basta un digito, sin exigir documento ni condicion fiscal.
+  private assertCanBeContacted(customer: Customer, isOwner: boolean, hasEncargo: boolean): void {
+    if (/\d/.test(customer.phone ?? "")) return;
+
+    if (!isOwner) {
+      throw new ValidationError("Completá tu teléfono en Mi perfil para poder confirmar el pedido");
+    }
+    if (hasEncargo) {
+      throw new ValidationError(
+        "El cliente no tiene teléfono cargado y el pedido incluye productos por encargo, que se cotizan por WhatsApp",
+      );
+    }
   }
 
   private validateDeliveryType(value: unknown): "retiro" | "envio" {

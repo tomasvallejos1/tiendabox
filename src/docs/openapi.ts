@@ -1791,7 +1791,14 @@ const openApiSpec = {
           "400": {
             description:
               "Datos inválidos o stock insuficiente. Para el owner: falta customer_id, " +
-              "el cliente indicado no existe o faltan los items",
+              "el cliente indicado no existe o faltan los items. " +
+              "El cliente web siempre debe tener teléfono; si el pedido lo crea el owner, " +
+              "solo se exige teléfono cuando incluye al menos un producto por encargo. " +
+              "Tener teléfono significa que customer.phone no es null y contiene al menos un dígito " +
+              "al quitar los espacios. No se exigen documento ni condición fiscal. " +
+              "Cliente web: 'Completá tu teléfono en Mi perfil para poder confirmar el pedido'. " +
+              "Owner con encargo: 'El cliente no tiene teléfono cargado y el pedido incluye productos " +
+              "por encargo, que se cotizan por WhatsApp'",
             content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
           },
           "401": {
