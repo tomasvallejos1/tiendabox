@@ -24,8 +24,8 @@ class FakeUserRepository implements IUserRepository {
     return user;
   }
 
-  async getById(): Promise<User | null> {
-    throw new Error("no usado en estos tests");
+  async getById(id: string): Promise<User | null> {
+    return this.users.find((user) => user.id === id) ?? null;
   }
 
   async getByIds(): Promise<User[]> {
@@ -40,8 +40,13 @@ class FakeUserRepository implements IUserRepository {
     throw new Error("no usado en estos tests");
   }
 
-  async update(): Promise<User | null> {
-    throw new Error("no usado en estos tests");
+  // Reemplaza el objeto en vez de mutarlo: FakeTransaction comparte las mismas referencias.
+  async update(id: string, data: Partial<Omit<User, "id" | "created_at">>): Promise<User | null> {
+    const index = this.users.findIndex((user) => user.id === id);
+    if (index === -1) return null;
+    const updated: User = { ...this.users[index]!, ...data };
+    this.users[index] = updated;
+    return updated;
   }
 
   async delete(): Promise<boolean> {
@@ -92,12 +97,16 @@ class FakeCustomerRepository implements ICustomerRepository {
   }
 }
 
+// El token sale de un contador y no del tamaño del Map: despues de borrar sesiones, el
+// tamaño baja y un token nuevo pisaria a uno que sigue vivo.
 class FakeSessionRepository implements ISessionRepository {
   readonly sessions = new Map<string, Session>();
+  private created = 0;
 
   async create(userId: string): Promise<Session> {
+    this.created++;
     const session: Session = {
-      token: `token-${this.sessions.size + 1}`,
+      token: `token-${this.created}`,
       user_id: userId,
       expires_at: "2026-01-02 00:00:00+00",
     };
@@ -111,6 +120,14 @@ class FakeSessionRepository implements ISessionRepository {
 
   async deleteByToken(token: string): Promise<boolean> {
     return this.sessions.delete(token);
+  }
+
+  async deleteByUserIdExcept(userId: string, keepToken: string): Promise<number> {
+    const toDelete = [...this.sessions.values()].filter(
+      (session) => session.user_id === userId && session.token !== keepToken,
+    );
+    toDelete.forEach((session) => this.sessions.delete(session.token));
+    return toDelete.length;
   }
 }
 
@@ -418,6 +435,114 @@ describe("AuthService", () => {
 
       await expect(sessionRepository.getByToken(token)).resolves.toBeNull();
       await expect(sessionRepository.getByToken(otherToken)).resolves.not.toBeNull();
+    });
+  });
+
+  describe("changePassword", () => {
+    const credentials = { email: validRegistration.email, password: validRegistration.password };
+    let userId: string;
+    let token: string;
+
+    beforeEach(async () => {
+      await service.register(validRegistration);
+      userId = userRepository.users[0]!.id;
+      ({ token } = await service.login(credentials));
+    });
+
+    it("cambia la contraseña: después entra con la nueva y no con la vieja", async () => {
+      await service.changePassword(userId, token, {
+        current_password: validRegistration.password,
+        new_password: "nueva-clave",
+      });
+
+      await expect(
+        service.login({ email: validRegistration.email, password: "nueva-clave" }),
+      ).resolves.toMatchObject({ id: userId });
+      await expect(service.login(credentials)).rejects.toThrow(
+        new ValidationError("Credenciales inválidas"),
+      );
+    });
+
+    it("con la contraseña actual incorrecta lanza ValidationError y no la cambia", async () => {
+      await expect(
+        service.changePassword(userId, token, {
+          current_password: "incorrecta",
+          new_password: "nueva-clave",
+        }),
+      ).rejects.toThrow(new ValidationError("La contraseña actual es incorrecta"));
+      expect(userRepository.users[0]!.password).toBe(validRegistration.password);
+    });
+
+    it.each([
+      ["demasiado corta", "12345", "El campo 'password' debe tener al menos 6 caracteres"],
+      [
+        "igual a la actual",
+        validRegistration.password,
+        "La nueva contraseña debe ser distinta de la actual",
+      ],
+    ])(
+      "rechaza una nueva contraseña %s, sin cambiar la actual",
+      async (_caso, newPassword, message) => {
+        await expect(
+          service.changePassword(userId, token, {
+            current_password: validRegistration.password,
+            new_password: newPassword,
+          }),
+        ).rejects.toThrow(new ValidationError(message));
+        expect(userRepository.users[0]!.password).toBe(validRegistration.password);
+      },
+    );
+
+    it.each([
+      ["ausente", undefined],
+      ["vacía", ""],
+    ])("exige current_password: %s", async (_caso, currentPassword) => {
+      await expect(
+        service.changePassword(userId, token, {
+          current_password: currentPassword,
+          new_password: "nueva-clave",
+        }),
+      ).rejects.toThrow(new ValidationError("El campo 'current_password' es obligatorio"));
+    });
+
+    // Igual que en login: nada se recorta, " secreto" y "secreto" son contraseñas distintas.
+    it("los espacios cuentan: ' secreto' no es lo mismo que 'secreto'", async () => {
+      const other = await userRepository.create({
+        ...validUser,
+        email: "espacios@example.com",
+        password: "secreto",
+      });
+
+      await expect(
+        service.changePassword(other.id, "token-x", {
+          current_password: " secreto",
+          new_password: "nueva-clave",
+        }),
+      ).rejects.toThrow(new ValidationError("La contraseña actual es incorrecta"));
+
+      await service.changePassword(other.id, "token-x", {
+        current_password: "secreto",
+        new_password: " secreto",
+      });
+      expect((await userRepository.getById(other.id))!.password).toBe(" secreto");
+    });
+
+    it("cierra las otras sesiones del usuario, conserva la actual y no toca las de otro usuario", async () => {
+      const { token: otherSession } = await service.login(credentials);
+      await userRepository.create({ ...validUser, email: "otro@example.com" });
+      const { token: otherUserSession } = await service.login({
+        email: "otro@example.com",
+        password: validUser.password,
+      });
+
+      await service.changePassword(userId, token, {
+        current_password: validRegistration.password,
+        new_password: "nueva-clave",
+      });
+
+      await expect(sessionRepository.getByToken(token)).resolves.not.toBeNull();
+      await expect(sessionRepository.getByToken(otherSession)).resolves.toBeNull();
+      await expect(sessionRepository.getByToken(otherUserSession)).resolves.not.toBeNull();
     });
   });
 });

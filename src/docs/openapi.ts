@@ -14,7 +14,10 @@ const openApiSpec = {
   },
   servers: [{ url: "http://localhost:3000", description: "Servidor local de desarrollo" }],
   tags: [
-    { name: "Auth", description: "Registro, login y logout de usuarios" },
+    {
+      name: "Auth",
+      description: "Registro, login, logout y cambio de contraseña de usuarios",
+    },
     { name: "Users", description: "CRUD interno de usuarios (sin guards)" },
     { name: "Customers", description: "Gestión de perfiles de cliente" },
     { name: "Categories", description: "Categorías del catálogo de productos" },
@@ -457,6 +460,53 @@ const openApiSpec = {
         ],
         responses: {
           "204": { description: "Sesión cerrada (sin body)" },
+          "500": {
+            description: "Error interno del servidor",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+          },
+        },
+      },
+    },
+
+    "/api/auth/password": {
+      put: {
+        tags: ["Auth"],
+        summary: "Cambiar la contraseña del usuario autenticado",
+        description:
+          "Requiere autenticación, para cualquier rol (cliente u owner). Exige la contraseña " +
+          "actual. Las contraseñas no se recortan: los espacios cuentan. Al cambiarla se " +
+          "cierran las demás sesiones del usuario; la sesión del token usado sigue activa.",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object" as const,
+                properties: {
+                  current_password: { type: "string" as const },
+                  new_password: { type: "string" as const, minLength: 6 },
+                },
+                required: ["current_password", "new_password"],
+              },
+            },
+          },
+        },
+        responses: {
+          "204": { description: "Contraseña cambiada (sin body)" },
+          "400": {
+            description:
+              "Datos inválidos. Mensajes posibles: " +
+              "\"El campo 'current_password' es obligatorio\", " +
+              '"La contraseña actual es incorrecta", ' +
+              "\"El campo 'password' debe tener al menos 6 caracteres\", " +
+              '"La nueva contraseña debe ser distinta de la actual"',
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+          },
+          "401": {
+            description: "No autenticado o sesión expirada",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+          },
           "500": {
             description: "Error interno del servidor",
             content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },

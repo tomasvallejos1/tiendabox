@@ -68,7 +68,7 @@ Al arrancar, la API crea las tablas de PostgreSQL (`src/db/sql/init.sql`) y prec
 
 ### Probar la API
 
-- **Autenticación:** `POST /api/auth/register` o `POST /api/auth/login` devuelven un token de sesión, que se envía en el header `Authorization: Bearer <token>`.
+- **Autenticación:** `POST /api/auth/register` o `POST /api/auth/login` devuelven un token de sesión, que se envía en el header `Authorization: Bearer <token>`. Con ese token, `PUT /api/auth/password` (`{ current_password, new_password }`, responde 204) cambia la contraseña del usuario logueado, sea cliente u owner, y cierra sus otras sesiones.
 - **Swagger UI** (`/api-docs`): todos los endpoints, con schemas y ejemplos.
 - **Archivos `.http`** en `tests/http/`, uno por recurso, para usar con la extensión [REST Client](https://marketplace.visualstudio.com/items?itemName=humao.rest-client) de VS Code.
 - **Tests unitarios:** `npm run test:unit` (Jest, con repositorios fake en memoria, sin bases de datos).

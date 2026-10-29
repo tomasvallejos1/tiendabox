@@ -2,6 +2,8 @@ import { OrderController } from "../../src/order/order.controller";
 import type { OrderService } from "../../src/order/order.service";
 import { CustomerController } from "../../src/customer/customer.controller";
 import type { CustomerService } from "../../src/customer/customer.service";
+import { AuthController } from "../../src/auth/auth.controller";
+import type { AuthService } from "../../src/auth/auth.service";
 import { ConflictError, ForbiddenError, ValidationError } from "../../src/errors";
 import { createMockRequest, createMockResponse } from "../fixtures";
 
@@ -256,5 +258,39 @@ describe("CustomerController", () => {
       "user-1",
       "cliente",
     );
+  });
+});
+
+describe("AuthController", () => {
+  const service = { changePassword: jest.fn() };
+  const controller = new AuthController(service as unknown as AuthService);
+
+  describe("changePassword", () => {
+    const request = {
+      user: { id: "user-1", role: "cliente" },
+      headers: { authorization: "Bearer token-1" },
+      body: { current_password: "secreto123", new_password: "nueva-clave" },
+    };
+
+    it("responde 204 sin body y pasa al service el usuario, el token y el body", async () => {
+      service.changePassword.mockResolvedValue(undefined);
+
+      const res = await call(controller.changePassword as Handler, request);
+
+      expect(res.statusCode).toBe(204);
+      expect(res.body).toBeUndefined();
+      expect(res.sent).toBe(true);
+      expect(service.changePassword).toHaveBeenLastCalledWith("user-1", "token-1", request.body);
+    });
+
+    it("traduce ValidationError a 400 con el mensaje del service", async () => {
+      const error = new ValidationError("La contraseña actual es incorrecta");
+      service.changePassword.mockRejectedValue(error);
+
+      const res = await call(controller.changePassword as Handler, request);
+
+      expect(res.statusCode).toBe(400);
+      expect(res.body).toEqual({ error: "La contraseña actual es incorrecta" });
+    });
   });
 });

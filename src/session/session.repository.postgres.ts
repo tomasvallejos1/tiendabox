@@ -36,6 +36,14 @@ export class SessionRepositoryPostgres implements ISessionRepository {
     return (result.rowCount ?? 0) > 0;
   }
 
+  async deleteByUserIdExcept(userId: string, keepToken: string): Promise<number> {
+    const result = await this.pool.query(
+      `DELETE FROM sessions WHERE user_id = $1 AND token <> $2`,
+      [userId, keepToken],
+    );
+    return result.rowCount ?? 0;
+  }
+
   // Mapea la fila de PostgreSQL a la entidad Session.
   private toEntity(row: { token: string; user_id: string; expires_at: string }): Session {
     return {

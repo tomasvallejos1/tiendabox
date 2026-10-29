@@ -110,7 +110,7 @@ export class App {
       this.factory.createRegistrationTransaction(),
     );
     const authController = new AuthController(authService);
-    this.app.use("/api", createAuthRoutes(authController));
+    this.app.use("/api", createAuthRoutes(authController, { auth }));
 
     const productRepository = this.factory.createProductRepository();
     const productService = new ProductService(

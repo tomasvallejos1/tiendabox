@@ -24,6 +24,10 @@ class FakeSessionRepository implements ISessionRepository {
   async deleteByToken(): Promise<boolean> {
     throw new Error("no usado en estos tests");
   }
+
+  async deleteByUserIdExcept(): Promise<number> {
+    throw new Error("no usado en estos tests");
+  }
 }
 
 class FakeUserRepository implements IUserRepository {

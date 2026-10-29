@@ -1,6 +1,7 @@
 import { IUserRepository } from "../user/user.repository.interface";
 import { ICustomerRepository } from "../customer/customer.repository.interface";
 import { ISessionRepository } from "../session/session.repository.interface";
+import { validatePassword } from "../user/password";
 import { ConflictError, ValidationError } from "../errors";
 
 // Repositorios que el alta usa dentro de una misma transaccion.
@@ -83,6 +84,40 @@ export class AuthService {
 
   async logout(token: string): Promise<void> {
     await this.sessionRepo.deleteByToken(token);
+  }
+
+  // Cambia la contraseña del usuario autenticado y cierra sus otras sesiones: si alguien
+  // tenia la contraseña vieja y ya habia entrado, queda afuera. La sesion actual sigue viva.
+  async changePassword(
+    userId: string,
+    currentToken: string,
+    input: { current_password?: unknown; new_password?: unknown },
+  ): Promise<void> {
+    // Sin trim, igual que en login: los espacios son parte de la contraseña.
+    if (typeof input.current_password !== "string" || input.current_password.length === 0) {
+      throw new ValidationError("El campo 'current_password' es obligatorio");
+    }
+    const currentPassword = input.current_password;
+
+    // Con un token valido no deberia pasar: authenticate ya cargo al usuario.
+    const user = await this.userRepo.getById(userId);
+    if (!user) {
+      throw new ValidationError("No se pudo cambiar la contraseña");
+    }
+    if (currentPassword !== user.password) {
+      throw new ValidationError("La contraseña actual es incorrecta");
+    }
+
+    const newPassword = validatePassword(input.new_password);
+    if (newPassword === currentPassword) {
+      throw new ValidationError("La nueva contraseña debe ser distinta de la actual");
+    }
+
+    // Secuencial y no en runInTransaction: esa transaccion es la del alta y solo expone users
+    // y customers, no sesiones. Va primero la contraseña: si despues falla el borrado, la
+    // vieja ya no sirve para entrar y las otras sesiones mueren solas al vencer (24 h).
+    await this.userRepo.update(userId, { password: newPassword });
+    await this.sessionRepo.deleteByUserIdExcept(userId, currentToken);
   }
 
   private validateName(value: unknown): string {
