@@ -69,6 +69,35 @@ export class CartService {
     return this.toDetail((await this.cartRepository.getByCustomerId(customerId))!);
   }
 
+  // Fija la cantidad de un item existente; para quitarlo se usa removeItem.
+  async updateItemQuantity(
+    userId: string,
+    productId: string,
+    quantity: unknown,
+  ): Promise<CartDetail> {
+    const customerId = await this.resolveCustomerId(userId);
+
+    if (typeof quantity !== "number" || !Number.isInteger(quantity) || quantity <= 0) {
+      throw new ValidationError("La cantidad debe ser un entero mayor a 0");
+    }
+
+    const cart = await this.cartRepository.getByCustomerId(customerId);
+    if (!cart || !cart.items.some((item) => item.product_id === productId)) {
+      throw new ValidationError("El producto no está en el carrito");
+    }
+
+    const product = await this.productRepository.getById(productId);
+    if (!product || !product.is_active) {
+      throw new ValidationError("Producto no disponible");
+    }
+    if (product.type === "stock" && quantity > product.stock) {
+      throw new ValidationError(`Stock insuficiente. Disponible: ${product.stock}`);
+    }
+
+    await this.cartRepository.updateItemQuantity(cart.id, productId, quantity);
+    return this.toDetail((await this.cartRepository.getByCustomerId(customerId))!);
+  }
+
   async removeItem(userId: string, productId: string): Promise<CartDetail> {
     const customerId = await this.resolveCustomerId(userId);
     const cart = await this.cartRepository.getByCustomerId(customerId);

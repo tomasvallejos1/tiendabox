@@ -1,11 +1,13 @@
 import crypto from "crypto";
-import { Pool } from "pg";
+import { Pool, PoolClient } from "pg";
 import { Session } from "./session.entity";
 import { ISessionRepository } from "./session.repository.interface";
 
 // Implementacion del repositorio de sesiones con PostgreSQL.
 export class SessionRepositoryPostgres implements ISessionRepository {
-  constructor(private readonly pool: Pool) {}
+  // Acepta un PoolClient ademas del Pool: los tests de integracion corren cada caso dentro
+  // de una transaccion (BEGIN/ROLLBACK), que tiene que usar siempre la misma conexion.
+  constructor(private readonly pool: Pool | PoolClient) {}
 
   async create(userId: string): Promise<Session> {
     const token = crypto.randomUUID();
@@ -32,6 +34,14 @@ export class SessionRepositoryPostgres implements ISessionRepository {
   async deleteByToken(token: string): Promise<boolean> {
     const result = await this.pool.query(`DELETE FROM sessions WHERE token = $1`, [token]);
     return (result.rowCount ?? 0) > 0;
+  }
+
+  async deleteByUserIdExcept(userId: string, keepToken: string): Promise<number> {
+    const result = await this.pool.query(
+      `DELETE FROM sessions WHERE user_id = $1 AND token <> $2`,
+      [userId, keepToken],
+    );
+    return result.rowCount ?? 0;
   }
 
   // Mapea la fila de PostgreSQL a la entidad Session.

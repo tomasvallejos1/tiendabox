@@ -11,6 +11,7 @@ const VALID_TAX_STATUSES = [
   "monotributo",
   "exento",
 ] as const;
+type TaxStatus = (typeof VALID_TAX_STATUSES)[number];
 const DEFAULT_TAX_STATUS = "consumidor_final";
 const PASSWORD_MIN_LENGTH = 6;
 const GENERATED_PASSWORD_LENGTH = 10;
@@ -74,8 +75,9 @@ export class CustomerService {
   }): Promise<CreateCustomerResult> {
     const user_id = this.normalizeUserId(input.user_id);
     const name = this.validateName(input.name);
-    const government_id = this.validateGovernmentId(input.government_id);
+    // tax_status va primero: el formato valido del documento depende de la condicion fiscal.
     const tax_status = this.validateTaxStatus(input.tax_status);
+    const government_id = this.validateGovernmentId(input.government_id, tax_status);
     const phone = this.normalizeOptionalString(input.phone);
     const address = this.normalizeOptionalString(input.address);
     const email = this.normalizeEmail(input.email);
@@ -141,11 +143,24 @@ export class CustomerService {
     if (input.name !== undefined) {
       data.name = this.validateName(input.name);
     }
-    if (input.government_id !== undefined) {
-      data.government_id = this.validateGovernmentId(input.government_id);
-    }
-    if (input.tax_status !== undefined) {
-      data.tax_status = this.validateTaxStatus(input.tax_status);
+    if (input.government_id !== undefined || input.tax_status !== undefined) {
+      const current = await this.repository.getById(id);
+      if (!current) return null;
+
+      const taxStatusFinal = this.validateTaxStatus(
+        input.tax_status !== undefined ? input.tax_status : current.tax_status,
+      );
+      const governmentIdFinal = this.validateGovernmentId(
+        input.government_id !== undefined ? input.government_id : current.government_id,
+        taxStatusFinal,
+      );
+
+      if (input.government_id !== undefined) {
+        data.government_id = governmentIdFinal;
+      }
+      if (input.tax_status !== undefined) {
+        data.tax_status = taxStatusFinal;
+      }
     }
     if (input.phone !== undefined) {
       data.phone = this.normalizeOptionalString(input.phone);
@@ -221,24 +236,29 @@ export class CustomerService {
     return value.trim();
   }
 
-  // government_id: opcional; si viene, 11 digitos numericos (CUIT/CUIL). Vacio se trata como null.
-  private validateGovernmentId(value: unknown): string | null {
+  // government_id opcional: consumidor_final admite DNI de 7 u 8 digitos o CUIT/CUIL de 11;
+  // las otras condiciones requieren CUIT de 11 digitos. Vacio se trata como null.
+  private validateGovernmentId(value: unknown, taxStatus: TaxStatus): string | null {
     if (value === undefined || value === null) return null;
     if (typeof value !== "string") {
       throw new ValidationError("El campo 'government_id' debe ser un string");
     }
     const trimmed = value.trim();
     if (trimmed.length === 0) return null;
-    if (!/^\d{11}$/.test(trimmed)) {
+    const isConsumidorFinal = taxStatus === "consumidor_final";
+    const rule = isConsumidorFinal ? /^(\d{7,8}|\d{11})$/ : /^\d{11}$/;
+    if (!rule.test(trimmed)) {
       throw new ValidationError(
-        "El campo 'government_id' debe contener 11 dígitos numéricos (CUIT/CUIL)",
+        isConsumidorFinal
+          ? "El documento debe ser un DNI de 7 u 8 dígitos o un CUIT/CUIL de 11"
+          : "El CUIT debe tener 11 dígitos numéricos",
       );
     }
     return trimmed;
   }
 
   // tax_status: si viene, debe ser uno de los valores validos. Si no, default consumidor_final.
-  private validateTaxStatus(value: unknown): string {
+  private validateTaxStatus(value: unknown): TaxStatus {
     if (value === undefined || value === null) return DEFAULT_TAX_STATUS;
     if (typeof value !== "string") {
       throw new ValidationError("El campo 'tax_status' debe ser un string");
@@ -249,7 +269,7 @@ export class CustomerService {
         `El campo 'tax_status' debe ser uno de: ${VALID_TAX_STATUSES.join(", ")}`,
       );
     }
-    return trimmed;
+    return trimmed as TaxStatus;
   }
 
   // Campos opcionales string: si es string vacio lo trata como null.

@@ -1,11 +1,13 @@
 import crypto from "crypto";
-import { Pool } from "pg";
+import { Pool, PoolClient } from "pg";
 import { Cart, CartItem } from "./cart.entity";
 import { ICartRepository } from "./cart.repository.interface";
 
 // Implementacion del repositorio de Cart que habla con PostgreSQL.
 export class CartRepositoryPostgres implements ICartRepository {
-  constructor(private readonly pool: Pool) {}
+  // Acepta un PoolClient ademas del Pool: los tests de integracion corren cada caso dentro
+  // de una transaccion (BEGIN/ROLLBACK), que tiene que usar siempre la misma conexion.
+  constructor(private readonly pool: Pool | PoolClient) {}
 
   async getByCustomerId(customerId: string): Promise<Cart | null> {
     const cartResult = await this.pool.query(

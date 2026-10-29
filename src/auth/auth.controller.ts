@@ -25,14 +25,26 @@ export class AuthController {
 
   logout = async (req: Request, res: Response): Promise<void> => {
     try {
-      const raw = req.headers.authorization ?? "";
-      const token = raw.startsWith("Bearer ") ? raw.slice(7) : raw;
-      await this.service.logout(token);
+      await this.service.logout(this.bearerToken(req));
       res.status(204).send();
     } catch (error) {
       this.handleError(res, error);
     }
   };
+
+  changePassword = async (req: Request, res: Response): Promise<void> => {
+    try {
+      await this.service.changePassword(req.user!.id, this.bearerToken(req), req.body);
+      res.status(204).send();
+    } catch (error) {
+      this.handleError(res, error);
+    }
+  };
+
+  private bearerToken(req: Request): string {
+    const raw = req.headers.authorization ?? "";
+    return raw.startsWith("Bearer ") ? raw.slice(7) : raw;
+  }
 
   private handleError(res: Response, error: unknown): void {
     if (error instanceof ValidationError) {

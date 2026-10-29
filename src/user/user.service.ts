@@ -1,8 +1,8 @@
 import { PublicUser, User } from "./user.entity";
 import { IUserRepository } from "./user.repository.interface";
 import { ConflictError, ValidationError } from "../errors";
+import { validatePassword } from "./password";
 
-const PASSWORD_MIN_LENGTH = 6;
 const VALID_ROLES = ["cliente", "owner"];
 
 // Reglas de negocio de User. Delega la persistencia en el repositorio.
@@ -25,7 +25,7 @@ export class UserService {
     role?: unknown;
   }): Promise<PublicUser> {
     const email = this.validateEmail(input.email);
-    const password = this.validatePassword(input.password);
+    const password = validatePassword(input.password);
     const role = this.normalizeRole(input.role);
     await this.ensureEmailIsUnique(email);
     const user = await this.repository.create({ email, password, role });
@@ -42,7 +42,7 @@ export class UserService {
       data.email = this.validateEmail(input.email);
     }
     if (input.password !== undefined) {
-      data.password = this.validatePassword(input.password);
+      data.password = validatePassword(input.password);
     }
     if (input.role !== undefined) {
       data.role = this.validateRole(input.role);
@@ -93,19 +93,6 @@ export class UserService {
       throw new ValidationError("El campo 'email' debe ser un email valido");
     }
     return email;
-  }
-
-  // password obligatorio, string, minimo 6 caracteres
-  private validatePassword(value: unknown): string {
-    if (typeof value !== "string" || value.length === 0) {
-      throw new ValidationError("El campo 'password' es obligatorio");
-    }
-    if (value.length < PASSWORD_MIN_LENGTH) {
-      throw new ValidationError(
-        `El campo 'password' debe tener al menos ${PASSWORD_MIN_LENGTH} caracteres`,
-      );
-    }
-    return value;
   }
 
   // role obligatorio en este contexto: "cliente" o "owner"

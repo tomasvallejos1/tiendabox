@@ -14,7 +14,10 @@ const openApiSpec = {
   },
   servers: [{ url: "http://localhost:3000", description: "Servidor local de desarrollo" }],
   tags: [
-    { name: "Auth", description: "Registro, login y logout de usuarios" },
+    {
+      name: "Auth",
+      description: "Registro, login, logout y cambio de contraseña de usuarios",
+    },
     { name: "Users", description: "CRUD interno de usuarios (sin guards)" },
     { name: "Customers", description: "Gestión de perfiles de cliente" },
     { name: "Categories", description: "Categorías del catálogo de productos" },
@@ -61,7 +64,8 @@ const openApiSpec = {
           government_id: {
             type: "string" as const,
             nullable: true,
-            description: "CUIT/CUIL de 11 dígitos",
+            description:
+              "Opcional: consumidor_final admite DNI de 7 u 8 dígitos o CUIT/CUIL de 11; las otras condiciones fiscales requieren CUIT de 11 dígitos numéricos. Omitido, null o vacío se trata como null.",
           },
           tax_status: {
             type: "string" as const,
@@ -281,7 +285,8 @@ const openApiSpec = {
           government_id: {
             type: "string" as const,
             nullable: true,
-            description: "CUIT/CUIL de 11 dígitos",
+            description:
+              "Opcional: consumidor_final admite DNI de 7 u 8 dígitos o CUIT/CUIL de 11; las otras condiciones fiscales requieren CUIT de 11 dígitos numéricos. Omitido, null o vacío se trata como null.",
           },
           tax_status: {
             type: "string" as const,
@@ -455,6 +460,53 @@ const openApiSpec = {
         ],
         responses: {
           "204": { description: "Sesión cerrada (sin body)" },
+          "500": {
+            description: "Error interno del servidor",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+          },
+        },
+      },
+    },
+
+    "/api/auth/password": {
+      put: {
+        tags: ["Auth"],
+        summary: "Cambiar la contraseña del usuario autenticado",
+        description:
+          "Requiere autenticación, para cualquier rol (cliente u owner). Exige la contraseña " +
+          "actual. Las contraseñas no se recortan: los espacios cuentan. Al cambiarla se " +
+          "cierran las demás sesiones del usuario; la sesión del token usado sigue activa.",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object" as const,
+                properties: {
+                  current_password: { type: "string" as const },
+                  new_password: { type: "string" as const, minLength: 6 },
+                },
+                required: ["current_password", "new_password"],
+              },
+            },
+          },
+        },
+        responses: {
+          "204": { description: "Contraseña cambiada (sin body)" },
+          "400": {
+            description:
+              "Datos inválidos. Mensajes posibles: " +
+              "\"El campo 'current_password' es obligatorio\", " +
+              '"La contraseña actual es incorrecta", ' +
+              "\"El campo 'password' debe tener al menos 6 caracteres\", " +
+              '"La nueva contraseña debe ser distinta de la actual"',
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+          },
+          "401": {
+            description: "No autenticado o sesión expirada",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+          },
           "500": {
             description: "Error interno del servidor",
             content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
@@ -754,7 +806,8 @@ const openApiSpec = {
                   government_id: {
                     type: "string" as const,
                     nullable: true,
-                    description: "CUIT/CUIL 11 dígitos, o null",
+                    description:
+                      "Opcional. Con tax_status consumidor_final: DNI de 7 u 8 dígitos o CUIT/CUIL de 11. Con el resto de las condiciones: CUIT de 11 dígitos. Solo números, sin puntos ni guiones. Si no se envía tax_status, se valida contra la condición fiscal guardada del cliente; vacío o null lo borra",
                   },
                   tax_status: {
                     type: "string" as const,
@@ -838,7 +891,12 @@ const openApiSpec = {
                 type: "object" as const,
                 properties: {
                   name: { type: "string" as const },
-                  government_id: { type: "string" as const, nullable: true },
+                  government_id: {
+                    type: "string" as const,
+                    nullable: true,
+                    description:
+                      "Opcional. Con tax_status consumidor_final: DNI de 7 u 8 dígitos o CUIT/CUIL de 11. Con el resto de las condiciones: CUIT de 11 dígitos. Solo números, sin puntos ni guiones. Si no se envía tax_status, se asume consumidor_final",
+                  },
                   tax_status: {
                     type: "string" as const,
                     enum: ["consumidor_final", "responsable_inscripto", "monotributo", "exento"],
@@ -1605,6 +1663,79 @@ const openApiSpec = {
     },
 
     "/api/cart/items/{productId}": {
+      put: {
+        tags: ["Cart"],
+        summary: "Fijar la cantidad de un item del carrito — Solo cliente",
+        description:
+          "Requiere autenticación y rol cliente. El producto debe estar en el carrito y disponible. " +
+          "Reemplaza la cantidad por un entero mayor a 0. Para eliminar el item, usar DELETE. " +
+          "Los productos tipo 'stock' no pueden superar el stock disponible; los de encargo no tienen límite de stock.",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "productId",
+            in: "path" as const,
+            required: true,
+            schema: { type: "string" as const },
+            description: "ID del producto cuya cantidad se quiere fijar",
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object" as const,
+                properties: {
+                  quantity: { type: "integer" as const, minimum: 1, example: 1 },
+                },
+                required: ["quantity"],
+              },
+            },
+          },
+        },
+        responses: {
+          "200": {
+            description:
+              "Carrito actualizado con cantidades, subtotales, item_count y total recalculados",
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/CartDetail" } },
+            },
+          },
+          "400": {
+            description:
+              "Cantidad inválida, producto ausente del carrito o no disponible, stock insuficiente o usuario sin perfil de cliente",
+            content: {
+              "application/json": {
+                schema: { $ref: "#/components/schemas/Error" },
+                examples: {
+                  invalidQuantity: {
+                    value: { error: "La cantidad debe ser un entero mayor a 0" },
+                  },
+                  missingItem: { value: { error: "El producto no está en el carrito" } },
+                  unavailableProduct: { value: { error: "Producto no disponible" } },
+                  insufficientStock: { value: { error: "Stock insuficiente. Disponible: 2" } },
+                  missingCustomer: {
+                    value: { error: "No existe un perfil de cliente para este usuario" },
+                  },
+                },
+              },
+            },
+          },
+          "401": {
+            description: "No autenticado",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+          },
+          "403": {
+            description: "No autorizado (requiere rol cliente)",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+          },
+          "500": {
+            description: "Error interno del servidor",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+          },
+        },
+      },
       delete: {
         tags: ["Cart"],
         summary: "Eliminar un item del carrito — Solo cliente",
@@ -1710,7 +1841,14 @@ const openApiSpec = {
           "400": {
             description:
               "Datos inválidos o stock insuficiente. Para el owner: falta customer_id, " +
-              "el cliente indicado no existe o faltan los items",
+              "el cliente indicado no existe o faltan los items. " +
+              "El cliente web siempre debe tener teléfono; si el pedido lo crea el owner, " +
+              "solo se exige teléfono cuando incluye al menos un producto por encargo. " +
+              "Tener teléfono significa que customer.phone no es null y contiene al menos un dígito " +
+              "al quitar los espacios. No se exigen documento ni condición fiscal. " +
+              "Cliente web: 'Completá tu teléfono en Mi perfil para poder confirmar el pedido'. " +
+              "Owner con encargo: 'El cliente no tiene teléfono cargado y el pedido incluye productos " +
+              "por encargo, que se cotizan por WhatsApp'",
             content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
           },
           "401": {
