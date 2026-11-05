@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS users (
   email      VARCHAR(150) UNIQUE NOT NULL,
   password   VARCHAR(255) NOT NULL,
   role       VARCHAR(20)  NOT NULL DEFAULT 'cliente',
-  created_at TIMESTAMP    NOT NULL DEFAULT NOW()
+  created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
 INSERT INTO users (id, email, password, role)
@@ -25,20 +25,20 @@ CREATE TABLE IF NOT EXISTS customers (
   tax_status    VARCHAR(30) NOT NULL DEFAULT 'consumidor_final',
   phone         VARCHAR(30),
   address       VARCHAR(255),
-  created_at    TIMESTAMP NOT NULL DEFAULT NOW()
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
   token      VARCHAR(36) PRIMARY KEY,
   user_id    VARCHAR(36) NOT NULL REFERENCES users(id),
   expires_at TIMESTAMPTZ NOT NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS carts (
   id          VARCHAR(36) PRIMARY KEY,
   customer_id VARCHAR(36) UNIQUE NOT NULL REFERENCES customers(id),
-  updated_at  TIMESTAMP NOT NULL DEFAULT NOW()
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS cart_items (
@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS orders (
   delivery_type    VARCHAR(20) NOT NULL,
   delivery_address VARCHAR(255),
   total            NUMERIC(12,2) NOT NULL DEFAULT 0,
-  created_at       TIMESTAMP NOT NULL DEFAULT NOW()
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS order_items (
@@ -89,3 +89,14 @@ ALTER TABLE sessions ALTER COLUMN expires_at TYPE TIMESTAMPTZ;
 -- El cliente de local no tiene cuenta web: user_id pasa a ser opcional. Si la columna
 -- ya es nullable, DROP NOT NULL no hace nada.
 ALTER TABLE customers ALTER COLUMN user_id DROP NOT NULL;
+
+-- Fechas con zona horaria. Como TIMESTAMP (sin zona) se guardaba la hora del servidor,
+-- que en Docker es UTC, y la API la devolvia sin zona: el front la leia como hora
+-- argentina y la corria tres horas. El cast implicito interpreta los valores viejos en la
+-- zona de la sesion, que es la misma con la que NOW() los guardo, asi que el instante no
+-- cambia. Si la columna ya es TIMESTAMPTZ no hace nada: se puede correr en cada arranque.
+ALTER TABLE users ALTER COLUMN created_at TYPE TIMESTAMPTZ;
+ALTER TABLE customers ALTER COLUMN created_at TYPE TIMESTAMPTZ;
+ALTER TABLE sessions ALTER COLUMN created_at TYPE TIMESTAMPTZ;
+ALTER TABLE carts ALTER COLUMN updated_at TYPE TIMESTAMPTZ;
+ALTER TABLE orders ALTER COLUMN created_at TYPE TIMESTAMPTZ;

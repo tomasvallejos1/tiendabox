@@ -39,7 +39,7 @@ export class UserController {
 
   update = async (req: Request, res: Response): Promise<void> => {
     try {
-      const user = await this.service.update(req.params["id"] as string, req.body);
+      const user = await this.service.update(req.params["id"] as string, req.body, req.user!.id);
       if (!user) {
         res.status(404).json({ error: "Usuario no encontrado" });
         return;
@@ -52,7 +52,7 @@ export class UserController {
 
   delete = async (req: Request, res: Response): Promise<void> => {
     try {
-      const deleted = await this.service.delete(req.params["id"] as string);
+      const deleted = await this.service.delete(req.params["id"] as string, req.user!.id);
       if (!deleted) {
         res.status(404).json({ error: "Usuario no encontrado" });
         return;

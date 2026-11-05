@@ -2,7 +2,8 @@ import { CategoryService } from "../../src/category/category.service";
 import { Category } from "../../src/category/category.entity";
 import { ICategoryRepository } from "../../src/category/category.repository.interface";
 import { ConflictError, ValidationError } from "../../src/errors";
-import { validCategory } from "../fixtures";
+import type { IProductRepository } from "../../src/product/product.repository.interface";
+import { stubRepository, validCategory } from "../fixtures";
 
 // Fake en memoria de ICategoryRepository. getByName replica la collation strength 2 del repo
 // de Mongo: no distingue mayusculas. La insensibilidad la pone el repo, no el service; el
@@ -51,11 +52,17 @@ class FakeCategoryRepository implements ICategoryRepository {
 
 describe("CategoryService", () => {
   let repository: FakeCategoryRepository;
+  // Productos activos por category_id; CategoryService solo pregunta cuantos hay.
+  let activeProducts: Map<string, number>;
   let service: CategoryService;
 
   beforeEach(() => {
     repository = new FakeCategoryRepository();
-    service = new CategoryService(repository);
+    activeProducts = new Map();
+    const productRepository = stubRepository<IProductRepository>("products", {
+      countActiveByCategory: async (id: string) => activeProducts.get(id) ?? 0,
+    });
+    service = new CategoryService(repository, productRepository);
   });
 
   describe("create", () => {
@@ -183,7 +190,23 @@ describe("CategoryService", () => {
   });
 
   describe("delete", () => {
-    it("delega en el repositorio y propaga su resultado", async () => {
+    // Regresion: se borraba y los productos quedaban apuntando a la categoría inexistente.
+    it.each([
+      [1, "1 producto"],
+      [3, "3 productos"],
+    ])("con %i productos activos lanza ConflictError y no borra", async (count, texto) => {
+      const { id } = await service.create(validCategory);
+      activeProducts.set(id, count);
+      const remove = jest.spyOn(repository, "delete");
+
+      await expect(service.delete(id)).rejects.toThrow(
+        new ConflictError(`No se puede eliminar la categoría: tiene ${texto}`),
+      );
+      expect(remove).not.toHaveBeenCalled();
+      await expect(service.getById(id)).resolves.not.toBeNull();
+    });
+
+    it("sin productos activos borra y propaga el resultado del repositorio", async () => {
       const { id } = await service.create(validCategory);
       const remove = jest.spyOn(repository, "delete");
 

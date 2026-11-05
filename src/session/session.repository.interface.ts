@@ -6,4 +6,8 @@ export interface ISessionRepository {
   deleteByToken(token: string): Promise<boolean>;
   // Borra todas las sesiones del usuario menos la de keepToken. Devuelve cuantas borro.
   deleteByUserIdExcept(userId: string, keepToken: string): Promise<number>;
+  // Borra todas las sesiones del usuario. Devuelve cuantas borro.
+  deleteByUserId(userId: string): Promise<number>;
+  // Borra las sesiones vencidas del usuario. Devuelve cuantas borro.
+  deleteExpiredByUserId(userId: string): Promise<number>;
 }

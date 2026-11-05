@@ -28,6 +28,14 @@ class FakeSessionRepository implements ISessionRepository {
   async deleteByUserIdExcept(): Promise<number> {
     throw new Error("no usado en estos tests");
   }
+
+  async deleteByUserId(): Promise<number> {
+    throw new Error("no usado en estos tests");
+  }
+
+  async deleteExpiredByUserId(): Promise<number> {
+    throw new Error("no usado en estos tests");
+  }
 }
 
 class FakeUserRepository implements IUserRepository {

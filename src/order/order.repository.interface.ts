@@ -19,5 +19,9 @@ export interface IOrderRepository {
   getById(id: string): Promise<Order | null>;
   getByCustomerId(customerId: string): Promise<Order[]>;
   getAll(statusFilter?: string): Promise<Order[]>;
-  updateStatus(id: string, status: OrderStatus): Promise<Order | null>;
+  // true si el cliente tiene al menos un pedido, en cualquier estado.
+  existsForCustomer(customerId: string): Promise<boolean>;
+  // Cambia el estado solo si el actual está en `from`. Devuelve el pedido actualizado,
+  // o null si no se modificó ninguna fila (no existe o otro request ya lo cambió).
+  updateStatusIf(id: string, from: OrderStatus[], to: OrderStatus): Promise<Order | null>;
 }

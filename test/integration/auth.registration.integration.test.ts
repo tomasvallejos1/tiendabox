@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { PostgreSqlContainer } from "@testcontainers/postgresql";
 import type { StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { AuthService } from "../../src/auth/auth.service";
-import { createRegistrationTransaction } from "../../src/db/database-provider.factory";
+import { createRunInTransaction } from "../../src/db/database-provider.factory";
 import { withTransaction } from "../../src/db/transaction";
 import { UserRepositoryPostgres } from "../../src/user/user.repository.postgres";
 import { CustomerRepositoryPostgres } from "../../src/customer/customer.repository.postgres";
@@ -39,7 +39,7 @@ describe("Alta de cuentas (AuthService.register) — integración con BD real", 
       new UserRepositoryPostgres(pool),
       new CustomerRepositoryPostgres(pool),
       new SessionRepositoryPostgres(pool),
-      createRegistrationTransaction(pool),
+      createRunInTransaction(pool),
     );
   }, 180_000);
 

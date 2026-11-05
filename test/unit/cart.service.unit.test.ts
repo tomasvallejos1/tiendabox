@@ -53,6 +53,14 @@ class FakeProductRepository implements IProductRepository {
   async incrementStock(): Promise<void> {
     throw new Error("no usado en estos tests");
   }
+
+  async countActiveByCategory(): Promise<number> {
+    throw new Error("no usado en estos tests");
+  }
+
+  async countActiveByBrand(): Promise<number> {
+    throw new Error("no usado en estos tests");
+  }
 }
 
 class FakeCartRepository implements ICartRepository {
@@ -95,6 +103,10 @@ class FakeCartRepository implements ICartRepository {
   async clear(cartId: string): Promise<void> {
     const cart = this.carts.get(cartId);
     if (cart) cart.items = [];
+  }
+
+  async deleteByCustomerId(): Promise<void> {
+    throw new Error("no usado en estos tests");
   }
 }
 
@@ -305,6 +317,35 @@ describe("CartService (carrito enriquecido)", () => {
   it("addItem sigue rechazando una cantidad mayor al stock", async () => {
     await expect(ctx.service.addItem("user-1", "p-low", 3)).rejects.toThrow(ValidationError);
   });
+
+  // Regresion: { "$ne": null } llegaba a findOne({ _id }) como operador de Mongo, matcheaba
+  // un producto y se guardaba el string '{"$ne":null}' en cart_items.
+  it.each([{ $ne: null }, 42, null, undefined, "", "   ", ["p-stock"]])(
+    "addItem rechaza el product_id %p sin consultar productos ni tocar el carrito",
+    async (productId) => {
+      const productGetById = jest.spyOn(ctx.productRepository, "getById");
+      const cartCalls = (
+        [
+          "getByCustomerId",
+          "createForCustomer",
+          "addItem",
+          "updateItemQuantity",
+          "removeItem",
+          "clear",
+        ] as const
+      ).map((method) => jest.spyOn(ctx.cartRepository, method));
+
+      await expect(ctx.service.addItem("user-1", productId, 1)).rejects.toThrow(
+        new ValidationError("El campo 'product_id' es obligatorio"),
+      );
+
+      expect(productGetById).not.toHaveBeenCalled();
+      for (const spy of cartCalls) {
+        expect(spy).not.toHaveBeenCalled();
+      }
+      expect(ctx.cartRepository.carts.size).toBe(0);
+    },
+  );
 
   describe("updateItemQuantity", () => {
     it("fija la cantidad de 3 a 1 sin sumarla y la guarda", async () => {

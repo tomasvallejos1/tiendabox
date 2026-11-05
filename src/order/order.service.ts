@@ -5,6 +5,7 @@ import { ICartRepository } from "../cart/cart.repository.interface";
 import { ICustomerRepository } from "../customer/customer.repository.interface";
 import { Customer } from "../customer/customer.entity";
 import { ValidationError, ForbiddenError } from "../errors";
+import { requireId } from "../validation";
 
 // Logica de negocio de pedidos. Valida productos, stock, y delivery.
 
@@ -16,6 +17,21 @@ const FLUJO: OrderStatus[] = [
   "listo_para_retirar",
   "entregado",
 ];
+
+// Estados desde los que se puede cancelar, segun quien cancela.
+const CANCELABLE_POR_OWNER: OrderStatus[] = [
+  "pendiente",
+  "confirmado",
+  "en_preparacion",
+  "listo_para_retirar",
+];
+const CANCELABLE_POR_CLIENTE: OrderStatus[] = ["pendiente"];
+
+const CAMBIO_CONCURRENTE = "El pedido cambió de estado mientras se procesaba. Volvé a cargarlo.";
+
+const ITEM_INVALIDO = "Cada item debe tener 'product_id' y 'quantity'";
+
+type ItemInput = { product_id: string; quantity: number };
 
 export class OrderService {
   constructor(
@@ -76,26 +92,26 @@ export class OrderService {
       customer_id?: unknown;
       delivery_type?: unknown;
       delivery_address?: unknown;
-      items?: { product_id: string; quantity: number }[];
+      items?: unknown;
     },
   ): Promise<OrderWithCustomer> {
     const isOwner = role === "owner";
     let customerId: string;
     let customer: Customer | null = null;
 
+    // La forma de los items se valida antes de tocar ninguna base.
+    const inputItems = this.parseItems(input.items);
+
     if (isOwner) {
       // El owner no tiene perfil de cliente: el pedido va a nombre del customer_id indicado.
-      if (typeof input.customer_id !== "string" || input.customer_id.trim().length === 0) {
-        throw new ValidationError("El campo 'customer_id' es obligatorio");
-      }
-      customer = await this.customerRepository.getById(input.customer_id.trim());
+      customer = await this.customerRepository.getById(requireId(input.customer_id, "customer_id"));
       if (!customer) {
         throw new ValidationError("El cliente indicado no existe");
       }
       customerId = customer.id;
 
       // El owner no tiene carrito y no debe consumir el del cliente: items es obligatorio.
-      if (!Array.isArray(input.items) || input.items.length === 0) {
+      if (inputItems.length === 0) {
         throw new ValidationError("Debe indicar los productos del pedido");
       }
     } else {
@@ -117,12 +133,12 @@ export class OrderService {
       deliveryAddress = input.delivery_address.trim();
     }
 
-    // 2. Determinar items: del input o del carrito del customer.
-    let rawItems: { product_id: string; quantity: number }[];
+    // 2. Determinar items: del input o, si no vino ninguno, del carrito del customer.
+    let rawItems: ItemInput[];
     let fromCart = false;
 
-    if (input.items && input.items.length > 0) {
-      rawItems = input.items;
+    if (inputItems.length > 0) {
+      rawItems = inputItems;
     } else {
       const cart = await this.cartRepository.getByCustomerId(customerId);
       if (!cart || cart.items.length === 0) {
@@ -276,6 +292,8 @@ export class OrderService {
   }
 
   // Avanza el estado de la orden un paso en el flujo lineal (owner).
+  // La transicion se aplica solo si el pedido sigue en el estado que se valido: dos avances
+  // simultaneos no se pisan, ni se avanza un pedido que otro request acaba de cancelar.
   async changeStatus(orderId: string, newStatus: OrderStatus): Promise<Order | null> {
     const order = await this.orderRepository.getById(orderId);
     if (!order) return null;
@@ -297,25 +315,23 @@ export class OrderService {
       throw new ValidationError("Transición de estado no permitida");
     }
 
-    return this.orderRepository.updateStatus(orderId, newStatus);
+    const updated = await this.orderRepository.updateStatusIf(orderId, [order.status], newStatus);
+    if (!updated) {
+      throw new ValidationError(CAMBIO_CONCURRENTE);
+    }
+    return updated;
   }
 
   // Cancela la orden. El owner puede cancelar cualquier pedido que no este entregado
   // ni cancelado; el cliente solo los propios y mientras esten pendientes.
   async cancelOrder(orderId: string, userId: string, role: string): Promise<Order | null> {
+    const isOwner = role === "owner";
     let order: Order | null;
 
-    if (role === "owner") {
+    if (isOwner) {
       // El owner no tiene perfil de cliente: no se resuelve customer.
       order = await this.orderRepository.getById(orderId);
       if (!order) return null;
-
-      if (order.status === "entregado") {
-        throw new ValidationError("No se puede cancelar un pedido ya entregado");
-      }
-      if (order.status === "cancelado") {
-        throw new ValidationError("El pedido ya está cancelado");
-      }
     } else {
       const customerId = await this.resolveCustomerId(userId);
       order = await this.orderRepository.getById(orderId);
@@ -326,24 +342,83 @@ export class OrderService {
       if (order.customer_id !== customerId) {
         throw new ForbiddenError("No puede cancelar un pedido de otro cliente");
       }
+    }
 
-      // Solo se puede cancelar si está pendiente.
-      if (order.status !== "pendiente") {
-        throw new ValidationError("Solo se puede cancelar un pedido pendiente");
-      }
+    // Chequeo previo: da el mensaje de error sin intentar la escritura.
+    const rechazo = this.cancelRejection(order.status, isOwner);
+    if (rechazo) throw rechazo;
+
+    // La condicion real va en la escritura: updateStatusIf solo cancela si el pedido sigue
+    // en un estado cancelable. De varias cancelaciones simultaneas, una sola obtiene el
+    // pedido; las demas reciben null y no reponen stock.
+    const from = isOwner ? CANCELABLE_POR_OWNER : CANCELABLE_POR_CLIENTE;
+    const updated = await this.orderRepository.updateStatusIf(orderId, from, "cancelado");
+
+    if (!updated) {
+      // Otro request cambio el estado entre la lectura y la escritura: se informa segun
+      // el estado en que quedo.
+      const current = await this.orderRepository.getById(orderId);
+      if (!current) return null;
+      throw (
+        this.cancelRejection(current.status, isOwner) ?? new ValidationError(CAMBIO_CONCURRENTE)
+      );
     }
 
     // Reponer stock de productos tipo stock (operación inversa al descuento en createOrder).
-    // deuda técnica: no transaccional (Postgres orders + Mongo products).
-    // Se repone antes de marcar "cancelado" para que, si updateStatus falla,
-    // el stock al menos quede corregido.
-    for (const item of order.items) {
+    // Primero se marca "cancelado" y despues se repone, y solo lo hace el request que
+    // efectivamente cambio el estado: asi el stock se repone una unica vez.
+    // deuda técnica: no transaccional (Postgres orders + Mongo products). Si la reposicion
+    // falla a mitad de camino, el pedido queda cancelado con stock de menos (nunca de mas):
+    // es el lado seguro, pero hay que corregir el stock a mano.
+    for (const item of updated.items) {
       if (item.type === "stock") {
         await this.productRepository.incrementStock(item.product_id, item.quantity);
       }
     }
 
-    return this.orderRepository.updateStatus(orderId, "cancelado");
+    return updated;
+  }
+
+  // Error por el que no se puede cancelar un pedido en `status`, o null si se puede.
+  private cancelRejection(status: OrderStatus, isOwner: boolean): ValidationError | null {
+    if (isOwner) {
+      if (status === "entregado") {
+        return new ValidationError("No se puede cancelar un pedido ya entregado");
+      }
+      if (status === "cancelado") {
+        return new ValidationError("El pedido ya está cancelado");
+      }
+      return null;
+    }
+    if (status !== "pendiente") {
+      return new ValidationError("Solo se puede cancelar un pedido pendiente");
+    }
+    return null;
+  }
+
+  // Valida la forma de input.items. Ausente => lista vacia (el cliente usa su carrito).
+  // Cada product_id pasa por requireId: un objeto como { "$gt": "" } llegaria a Mongo
+  // como operador y matchearia el primer producto que encuentre.
+  private parseItems(value: unknown): ItemInput[] {
+    if (value === undefined) return [];
+    if (!Array.isArray(value)) {
+      throw new ValidationError("El campo 'items' debe ser una lista");
+    }
+
+    return value.map((raw: unknown) => {
+      if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+        throw new ValidationError(ITEM_INVALIDO);
+      }
+      const { product_id, quantity } = raw as Record<string, unknown>;
+      if (product_id === undefined || quantity === undefined) {
+        throw new ValidationError(ITEM_INVALIDO);
+      }
+      const productId = requireId(product_id, "product_id");
+      if (typeof quantity !== "number" || !Number.isInteger(quantity) || quantity <= 0) {
+        throw new ValidationError("La cantidad de cada item debe ser un entero mayor a 0");
+      }
+      return { product_id: productId, quantity };
+    });
   }
 
   // Los pedidos web siempre requieren telefono; en mostrador, solo los encargos

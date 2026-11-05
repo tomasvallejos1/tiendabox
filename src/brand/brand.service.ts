@@ -1,12 +1,16 @@
 import { Brand } from "./brand.entity";
 import { IBrandRepository } from "./brand.repository.interface";
+import type { IProductRepository } from "../product/product.repository.interface";
 import { ConflictError, ValidationError } from "../errors";
 
 const NAME_MAX_LENGTH = 100;
 
 // Reglas de negocio de Brand. Delega la persistencia en el repositorio.
 export class BrandService {
-  constructor(private readonly repository: IBrandRepository) {}
+  constructor(
+    private readonly repository: IBrandRepository,
+    private readonly productRepository: IProductRepository,
+  ) {}
 
   async getAll(): Promise<Brand[]> {
     return this.repository.getAll();
@@ -44,7 +48,15 @@ export class BrandService {
     return this.repository.update(id, data);
   }
 
+  // Mongo no tiene claves foraneas: si se borrara con productos, quedarian apuntando a
+  // una marca que ya no existe. Los productos dados de baja no cuentan.
   async delete(id: string): Promise<boolean> {
+    const count = await this.productRepository.countActiveByBrand(id);
+    if (count > 0) {
+      throw new ConflictError(
+        `No se puede eliminar la marca: tiene ${count} ${count === 1 ? "producto" : "productos"}`,
+      );
+    }
     return this.repository.delete(id);
   }
 

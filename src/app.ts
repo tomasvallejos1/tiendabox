@@ -82,24 +82,32 @@ export class App {
     const ownerOnly = authorize("owner");
     const clienteOnly = authorize("cliente");
     const catalogGuards = { auth, ownerOnly };
+    // Transaccion de Postgres para las operaciones que tocan varias tablas.
+    const runInTransaction = this.factory.createTransaction();
+    // Categorias y marcas lo necesitan para no borrarse si tienen productos.
+    const productRepository = this.factory.createProductRepository();
 
     const categoryRepository = this.factory.createCategoryRepository();
     await categoryRepository.createIndexes();
-    const categoryService = new CategoryService(categoryRepository);
+    const categoryService = new CategoryService(categoryRepository, productRepository);
     const categoryController = new CategoryController(categoryService);
     this.app.use("/api", createCategoryRoutes(categoryController, catalogGuards));
 
     const brandRepository = this.factory.createBrandRepository();
-    const brandService = new BrandService(brandRepository);
+    const brandService = new BrandService(brandRepository, productRepository);
     const brandController = new BrandController(brandService);
     this.app.use("/api", createBrandRoutes(brandController, catalogGuards));
 
     const customerRepository = this.factory.createCustomerRepository();
-    const customerService = new CustomerService(customerRepository, userRepository);
+    const customerService = new CustomerService(
+      customerRepository,
+      userRepository,
+      runInTransaction,
+    );
     const customerController = new CustomerController(customerService);
     this.app.use("/api", createCustomerRoutes(customerController, catalogGuards));
 
-    const userService = new UserService(userRepository);
+    const userService = new UserService(userRepository, customerRepository, runInTransaction);
     const userController = new UserController(userService);
     this.app.use("/api", createUserRoutes(userController, catalogGuards));
 
@@ -107,12 +115,11 @@ export class App {
       userRepository,
       customerRepository,
       sessionRepository,
-      this.factory.createRegistrationTransaction(),
+      runInTransaction,
     );
     const authController = new AuthController(authService);
     this.app.use("/api", createAuthRoutes(authController, { auth }));
 
-    const productRepository = this.factory.createProductRepository();
     const productService = new ProductService(
       productRepository,
       categoryRepository,

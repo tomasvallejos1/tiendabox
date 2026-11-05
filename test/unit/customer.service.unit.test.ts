@@ -3,8 +3,14 @@ import { Customer } from "../../src/customer/customer.entity";
 import { ICustomerRepository } from "../../src/customer/customer.repository.interface";
 import { User } from "../../src/user/user.entity";
 import { IUserRepository } from "../../src/user/user.repository.interface";
+import { Cart } from "../../src/cart/cart.entity";
+import { ICartRepository } from "../../src/cart/cart.repository.interface";
+import { Session } from "../../src/session/session.entity";
+import { ISessionRepository } from "../../src/session/session.repository.interface";
+import { IOrderRepository } from "../../src/order/order.repository.interface";
+import type { RunInTransaction } from "../../src/db/run-in-transaction";
 import { ConflictError, ValidationError } from "../../src/errors";
-import { validCustomer } from "../fixtures";
+import { stubRepository, validCustomer } from "../fixtures";
 
 // Fake en memoria de ICustomerRepository. failOnCreate simula una caida de la base
 // justo al insertar el cliente.
@@ -53,8 +59,17 @@ class FakeCustomerRepository implements ICustomerRepository {
     return customer;
   }
 
-  async delete(): Promise<boolean> {
-    throw new Error("no usado en estos tests");
+  async delete(id: string): Promise<boolean> {
+    const index = this.customers.findIndex((customer) => customer.id === id);
+    if (index === -1) return false;
+    this.customers.splice(index, 1);
+    return true;
+  }
+
+  copy(): FakeCustomerRepository {
+    const copy = new FakeCustomerRepository();
+    copy.customers.push(...this.customers.map((customer) => ({ ...customer })));
+    return copy;
   }
 }
 
@@ -74,8 +89,8 @@ class FakeUserRepository implements IUserRepository {
     return user;
   }
 
-  async getById(): Promise<User | null> {
-    throw new Error("no usado en estos tests");
+  async getById(id: string): Promise<User | null> {
+    return this.users.find((user) => user.id === id) ?? null;
   }
 
   async getByIds(ids: string[]): Promise<User[]> {
@@ -95,23 +110,130 @@ class FakeUserRepository implements IUserRepository {
     throw new Error("no usado en estos tests");
   }
 
+  failOnDelete = false;
+
   async delete(id: string): Promise<boolean> {
+    if (this.failOnDelete) {
+      throw new Error("fallo simulado al borrar el usuario");
+    }
     const index = this.users.findIndex((user) => user.id === id);
     if (index === -1) return false;
     this.users.splice(index, 1);
     return true;
   }
+
+  copy(): FakeUserRepository {
+    const copy = new FakeUserRepository();
+    copy.users.push(...this.users.map((user) => ({ ...user })));
+    return copy;
+  }
+}
+
+// Carritos en memoria, con sus items adentro: borrar el carrito borra los items.
+class FakeCartRepository {
+  readonly carts: Cart[] = [];
+
+  async deleteByCustomerId(customerId: string): Promise<void> {
+    const kept = this.carts.filter((cart) => cart.customer_id !== customerId);
+    this.carts.splice(0, this.carts.length, ...kept);
+  }
+
+  copy(): FakeCartRepository {
+    const copy = new FakeCartRepository();
+    copy.carts.push(...this.carts.map((cart) => ({ ...cart, items: [...cart.items] })));
+    return copy;
+  }
+}
+
+class FakeSessionRepository {
+  readonly sessions: Session[] = [];
+
+  async deleteByUserId(userId: string): Promise<number> {
+    const kept = this.sessions.filter((session) => session.user_id !== userId);
+    const deleted = this.sessions.length - kept.length;
+    this.sessions.splice(0, this.sessions.length, ...kept);
+    return deleted;
+  }
+
+  copy(): FakeSessionRepository {
+    const copy = new FakeSessionRepository();
+    copy.sessions.push(...this.sessions.map((session) => ({ ...session })));
+    return copy;
+  }
+}
+
+// Solo importa que clientes tienen pedidos.
+class FakeOrderRepository {
+  readonly customerIdsWithOrders = new Set<string>();
+
+  async existsForCustomer(customerId: string): Promise<boolean> {
+    return this.customerIdsWithOrders.has(customerId);
+  }
+}
+
+// Transaccion en memoria: le pasa al trabajo COPIAS de los repos y solo vuelca los cambios
+// si termina bien, como un COMMIT. Si el service escribiera por fuera de la transaccion
+// (con los repos del constructor), el volcado final lo pisaria y los tests lo detectarian.
+class FakeTransaction {
+  calls = 0;
+
+  constructor(
+    private readonly db: {
+      customers: FakeCustomerRepository;
+      users: FakeUserRepository;
+      carts: FakeCartRepository;
+      sessions: FakeSessionRepository;
+      orders: FakeOrderRepository;
+    },
+  ) {}
+
+  readonly run: RunInTransaction = async (work) => {
+    this.calls++;
+    const customers = this.db.customers.copy();
+    const users = this.db.users.copy();
+    users.failOnDelete = this.db.users.failOnDelete;
+    const carts = this.db.carts.copy();
+    const sessions = this.db.sessions.copy();
+
+    const result = await work({
+      customers,
+      users,
+      carts: stubRepository<ICartRepository>("carts", carts),
+      sessions: stubRepository<ISessionRepository>("sessions", sessions),
+      orders: stubRepository<IOrderRepository>("orders", this.db.orders),
+    });
+
+    this.db.customers.customers.splice(0, Infinity, ...customers.customers);
+    this.db.users.users.splice(0, Infinity, ...users.users);
+    this.db.carts.carts.splice(0, Infinity, ...carts.carts);
+    this.db.sessions.sessions.splice(0, Infinity, ...sessions.sessions);
+    return result;
+  };
 }
 
 describe("CustomerService", () => {
   let customerRepository: FakeCustomerRepository;
   let userRepository: FakeUserRepository;
+  let cartRepository: FakeCartRepository;
+  let sessionRepository: FakeSessionRepository;
+  let orderRepository: FakeOrderRepository;
+  let transaction: FakeTransaction;
   let service: CustomerService;
 
   beforeEach(() => {
     customerRepository = new FakeCustomerRepository();
     userRepository = new FakeUserRepository();
-    service = new CustomerService(customerRepository, userRepository);
+    cartRepository = new FakeCartRepository();
+    sessionRepository = new FakeSessionRepository();
+    orderRepository = new FakeOrderRepository();
+    transaction = new FakeTransaction({
+      customers: customerRepository,
+      users: userRepository,
+      carts: cartRepository,
+      sessions: sessionRepository,
+      orders: orderRepository,
+    });
+    service = new CustomerService(customerRepository, userRepository, transaction.run);
   });
 
   describe("create", () => {
@@ -354,6 +476,107 @@ describe("CustomerService", () => {
         expect(customerRepository.getByIdCalls).toBe(0);
       },
     );
+  });
+
+  describe("delete", () => {
+    const expires_at = "2026-12-01T00:00:00.000Z";
+
+    // Cliente con carrito; con email, tambien con cuenta web y una sesion abierta.
+    async function seedCustomer(name: string, email?: string) {
+      const input = email ? { name, email, password: "secreto123" } : { name };
+      const { customer } = await service.create(input);
+      cartRepository.carts.push({
+        id: `cart-${customer.id}`,
+        customer_id: customer.id,
+        updated_at: expires_at,
+        items: [{ id: `item-${customer.id}`, product_id: "p1", quantity: 2 }],
+      });
+      if (customer.user_id) {
+        sessionRepository.sessions.push({
+          token: `token-${customer.id}`,
+          user_id: customer.user_id,
+          expires_at,
+        });
+      }
+      return customer;
+    }
+
+    // Otro cliente con cuenta, carrito y sesion: el borrado no lo puede tocar.
+    let other: Customer;
+    beforeEach(async () => {
+      other = await seedCustomer("Otro Cliente", "otro@example.com");
+    });
+
+    function expectOtherIntact() {
+      expect(customerRepository.customers.map((c) => c.id)).toContain(other.id);
+      expect(userRepository.users.map((u) => u.id)).toContain(other.user_id);
+      expect(cartRepository.carts.map((c) => c.customer_id)).toContain(other.id);
+      expect(sessionRepository.sessions.map((s) => s.user_id)).toContain(other.user_id);
+    }
+
+    // Regresion: con pedidos respondia 500 por la clave foranea de orders.customer_id.
+    it("con pedidos lanza ConflictError y no borra nada", async () => {
+      const customer = await seedCustomer("Maria Gomez", "maria@example.com");
+      orderRepository.customerIdsWithOrders.add(customer.id);
+
+      await expect(service.delete(customer.id)).rejects.toThrow(
+        new ConflictError("No se puede eliminar un cliente con pedidos registrados"),
+      );
+      expect(customerRepository.customers).toHaveLength(2);
+      expect(userRepository.users).toHaveLength(2);
+      expect(cartRepository.carts).toHaveLength(2);
+      expect(sessionRepository.sessions).toHaveLength(2);
+    });
+
+    // Regresion: se borraba el cliente y quedaba el usuario, que podia entrar sin poder
+    // comprar y dejaba el email tomado.
+    it("sin pedidos y con cuenta borra carrito, cliente, sesiones y usuario en una transacción", async () => {
+      const customer = await seedCustomer("Maria Gomez", "maria@example.com");
+
+      await expect(service.delete(customer.id)).resolves.toBe(true);
+
+      expect(transaction.calls).toBe(1);
+      expect(customerRepository.customers.map((c) => c.id)).toEqual([other.id]);
+      expect(userRepository.users.map((u) => u.id)).toEqual([other.user_id]);
+      expect(cartRepository.carts.map((c) => c.customer_id)).toEqual([other.id]);
+      expect(sessionRepository.sessions.map((s) => s.user_id)).toEqual([other.user_id]);
+      // El email quedo libre.
+      const again = await service.create({ name: "Maria", email: "maria@example.com" });
+      expect(again.customer.user_id).not.toBeNull();
+    });
+
+    it("un cliente de mostrador sin cuenta: borra carrito y cliente, sin tocar usuarios", async () => {
+      const customer = await seedCustomer("Cliente de Local");
+
+      await expect(service.delete(customer.id)).resolves.toBe(true);
+
+      expect(customerRepository.customers.map((c) => c.id)).toEqual([other.id]);
+      expect(cartRepository.carts.map((c) => c.customer_id)).toEqual([other.id]);
+      expect(userRepository.users).toHaveLength(1);
+      expect(sessionRepository.sessions).toHaveLength(1);
+    });
+
+    it("devuelve false si el cliente no existe, sin borrar nada", async () => {
+      await expect(service.delete("cus-inexistente")).resolves.toBe(false);
+
+      expectOtherIntact();
+      expect(cartRepository.carts).toHaveLength(1);
+    });
+
+    it("si falla a mitad de camino no queda nada borrado", async () => {
+      const customer = await seedCustomer("Maria Gomez", "maria@example.com");
+      userRepository.failOnDelete = true;
+
+      await expect(service.delete(customer.id)).rejects.toThrow(
+        "fallo simulado al borrar el usuario",
+      );
+
+      expect(customerRepository.customers).toHaveLength(2);
+      expect(cartRepository.carts).toHaveLength(2);
+      expect(sessionRepository.sessions).toHaveLength(2);
+      expect(userRepository.users).toHaveLength(2);
+      expectOtherIntact();
+    });
   });
 
   describe("getAll", () => {

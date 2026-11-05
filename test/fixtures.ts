@@ -74,6 +74,22 @@ export const validNewOrder: Omit<Parameters<IOrderRepository["create"]>[0], "cus
   ],
 };
 
+// Repositorio de prueba para las dependencias que un test no ejercita: implementa solo los
+// metodos de impl, y cualquier otro lanza al llamarlo, asi un uso no previsto falla a la
+// vista en vez de devolver undefined. jest.spyOn funciona sobre los metodos de impl.
+export function stubRepository<T extends object>(name: string, impl: Partial<T> = {}): T {
+  return new Proxy(impl as T, {
+    get(target, prop, receiver) {
+      if (prop in target) return Reflect.get(target, prop, receiver);
+      // "then" undefined: que un await sobre el repo no lo confunda con una promesa.
+      if (typeof prop === "symbol" || prop === "then") return undefined;
+      return () => {
+        throw new Error(`${name}.${prop} no usado en estos tests`);
+      };
+    },
+  });
+}
+
 // Dobles minimos de Express para probar middlewares y controllers sin levantar un servidor.
 
 // Response que registra lo que se llamo: el codigo, el body y si se cerro con send().

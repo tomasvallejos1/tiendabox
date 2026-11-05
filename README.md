@@ -66,6 +66,28 @@ Al arrancar, la API crea las tablas de PostgreSQL (`src/db/sql/init.sql`) y prec
 | Swagger UI      | http://localhost:3000/api-docs         |
 | Usuario owner   | `admin@tiendabox.com` / `admin123`     |
 
+### 5. Cargar datos de ejemplo (opcional)
+
+Con las bases levantadas:
+
+```bash
+npm run seed
+```
+
+Carga en las dos bases un catálogo y cuentas de prueba, usando los mismos servicios que la API (pasan por las mismas validaciones):
+
+- **Catálogo (MongoDB):** 3 categorías (Notebooks, Celulares, Accesorios), 4 marcas (Lenovo, Samsung, Logitech, Apple) y 10 productos, en stock y por encargo.
+- **Cuentas (PostgreSQL):** un owner y 4 clientes con cuenta web y perfil cargado (teléfono incluido, así pueden hacer pedidos).
+
+| Rol     | Email                                                                                                   |
+|---------|---------------------------------------------------------------------------------------------------------|
+| owner   | `dueno@tiendabox.com`                                                                                   |
+| cliente | `juan.perez@example.com`, `maria.gomez@example.com`, `luis.fernandez@example.com`, `ana.lopez@example.com` |
+
+Todas usan la contraseña de desarrollo **`tiendabox123`** (el script la muestra al terminar). Es solo para desarrollo local: no corras el seed contra una base real.
+
+Es **idempotente**: se puede correr varias veces. Lo que ya existe (usuarios por email; categorías, marcas y productos por nombre) se saltea. Lo único que actualiza es la imagen o el logo de lo que se cargó antes sin ellos.
+
 ### Probar la API
 
 - **Autenticación:** `POST /api/auth/register` o `POST /api/auth/login` devuelven un token de sesión, que se envía en el header `Authorization: Bearer <token>`. Con ese token, `PUT /api/auth/password` (`{ current_password, new_password }`, responde 204) cambia la contraseña del usuario logueado, sea cliente u owner, y cierra sus otras sesiones.
@@ -79,10 +101,11 @@ Al arrancar, la API crea las tablas de PostgreSQL (`src/db/sql/init.sql`) y prec
 |---------------------------------|----------------------------------------------------|
 | `npm run dev`                   | Servidor en modo desarrollo (nodemon + ts-node)    |
 | `npm run build` / `npm start`   | Compila a `dist/` y ejecuta la build               |
+| `npm run seed`                  | Carga datos de ejemplo (idempotente, ver paso 5)   |
 | `npm test`                      | Todos los tests (`test/`)                          |
 | `npm run test:unit`             | Tests unitarios (`test/unit/`)                     |
 | `npm run test:integration`      | Tests de integración (requieren Docker)            |
-| `npm run test:coverage`         | Tests con reporte de coverage (mínimo 80%)         |
+| `npm run test:coverage`         | Tests con reporte de coverage (mínimo 45%; meta 80%) |
 | `npm run lint` / `npm run format` | ESLint / Prettier sobre `src/` y `test/`         |
 
 ### Flujo de trabajo

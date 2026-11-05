@@ -1,4 +1,7 @@
-import { AuthService, RunInTransaction } from "../../src/auth/auth.service";
+import { AuthService } from "../../src/auth/auth.service";
+import type { RunInTransaction } from "../../src/db/run-in-transaction";
+import type { ICartRepository } from "../../src/cart/cart.repository.interface";
+import type { IOrderRepository } from "../../src/order/order.repository.interface";
 import { User } from "../../src/user/user.entity";
 import { IUserRepository } from "../../src/user/user.repository.interface";
 import { Customer } from "../../src/customer/customer.entity";
@@ -6,7 +9,7 @@ import { ICustomerRepository } from "../../src/customer/customer.repository.inte
 import { Session } from "../../src/session/session.entity";
 import { ISessionRepository } from "../../src/session/session.repository.interface";
 import { ConflictError, ValidationError } from "../../src/errors";
-import { validRegistration, validUser } from "../fixtures";
+import { stubRepository, validRegistration, validUser } from "../fixtures";
 
 // Fakes en memoria de los tres repositorios que consume AuthService.
 
@@ -105,10 +108,11 @@ class FakeSessionRepository implements ISessionRepository {
 
   async create(userId: string): Promise<Session> {
     this.created++;
+    // Vence en 24 h, como el repo real: login borra las vencidas antes de crear la nueva.
     const session: Session = {
       token: `token-${this.created}`,
       user_id: userId,
-      expires_at: "2026-01-02 00:00:00+00",
+      expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
     };
     this.sessions.set(session.token, session);
     return session;
@@ -129,6 +133,19 @@ class FakeSessionRepository implements ISessionRepository {
     toDelete.forEach((session) => this.sessions.delete(session.token));
     return toDelete.length;
   }
+
+  async deleteByUserId(): Promise<number> {
+    throw new Error("no usado en estos tests");
+  }
+
+  async deleteExpiredByUserId(userId: string): Promise<number> {
+    const now = Date.now();
+    const toDelete = [...this.sessions.values()].filter(
+      (session) => session.user_id === userId && new Date(session.expires_at).getTime() <= now,
+    );
+    toDelete.forEach((session) => this.sessions.delete(session.token));
+    return toDelete.length;
+  }
 }
 
 // Transaccion en memoria: le pasa al trabajo COPIAS de los repos y solo vuelca los cambios
@@ -141,6 +158,7 @@ class FakeTransaction {
   constructor(
     private readonly users: FakeUserRepository,
     private readonly customers: FakeCustomerRepository,
+    private readonly sessions: FakeSessionRepository,
   ) {}
 
   readonly run: RunInTransaction = async (work) => {
@@ -151,7 +169,14 @@ class FakeTransaction {
     txCustomers.customers.push(...this.customers.customers);
     txCustomers.failOnCreate = this.failCustomerCreate;
 
-    const result = await work({ users: txUsers, customers: txCustomers });
+    // El alta no toca sesiones, carritos ni pedidos: van sin copia o como stubs.
+    const result = await work({
+      users: txUsers,
+      customers: txCustomers,
+      sessions: this.sessions,
+      carts: stubRepository<ICartRepository>("carts"),
+      orders: stubRepository<IOrderRepository>("orders"),
+    });
 
     this.users.users.splice(0, this.users.users.length, ...txUsers.users);
     this.customers.customers.splice(0, this.customers.customers.length, ...txCustomers.customers);
@@ -178,7 +203,7 @@ describe("AuthService", () => {
     userRepository = new FakeUserRepository();
     customerRepository = new FakeCustomerRepository();
     sessionRepository = new FakeSessionRepository();
-    transaction = new FakeTransaction(userRepository, customerRepository);
+    transaction = new FakeTransaction(userRepository, customerRepository, sessionRepository);
     service = new AuthService(
       userRepository,
       customerRepository,
@@ -389,6 +414,35 @@ describe("AuthService", () => {
           ...override,
         }),
       ).rejects.toThrow(new ValidationError(`El campo '${field}' es obligatorio`));
+    });
+
+    // Antes nada borraba las sesiones vencidas y la tabla crecia sin limite.
+    it("borra las sesiones vencidas del usuario y conserva las vigentes y las de otros", async () => {
+      const userId = userRepository.users[0]!.id;
+      const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      const seed = (token: string, user_id: string, expires_at: string) =>
+        sessionRepository.sessions.set(token, { token, user_id, expires_at });
+      seed("vencida-1", userId, yesterday);
+      seed("vencida-2", userId, "2026-01-01T00:00:00.000Z");
+      seed("vigente", userId, tomorrow);
+      seed("vencida-de-otro", "otro-usuario", yesterday);
+      const deleteExpired = jest.spyOn(sessionRepository, "deleteExpiredByUserId");
+      const create = jest.spyOn(sessionRepository, "create");
+
+      const result = await service.login({
+        email: validRegistration.email,
+        password: validRegistration.password,
+      });
+
+      expect(deleteExpired).toHaveBeenCalledWith(userId);
+      // Primero se limpia y despues se crea la sesion nueva.
+      expect(deleteExpired.mock.invocationCallOrder[0]).toBeLessThan(
+        create.mock.invocationCallOrder[0]!,
+      );
+      expect([...sessionRepository.sessions.keys()].sort()).toEqual(
+        [result.token, "vencida-de-otro", "vigente"].sort(),
+      );
     });
   });
 

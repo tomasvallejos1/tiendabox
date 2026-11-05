@@ -3,6 +3,7 @@ import { IProductRepository, ProductFilter } from "./product.repository.interfac
 import type { ICategoryRepository } from "../category/category.repository.interface";
 import type { IBrandRepository } from "../brand/brand.repository.interface";
 import { ValidationError } from "../errors";
+import { requireId } from "../validation";
 
 const NAME_MAX_LENGTH = 100;
 const IMAGE_URL_ERROR = "La URL de la imagen debe comenzar con http:// o https://";
@@ -49,10 +50,14 @@ export class ProductService {
     const description = this.normalizeDescription(input.description);
     const image_url = this.normalizeImageUrl(input.image_url);
     const type = this.validateType(input.type);
-    const category_id = this.validateForeignId(input.category_id, "category_id");
-    const brand_id = this.validateForeignId(input.brand_id, "brand_id");
+    const category_id = requireId(input.category_id, "category_id");
+    const brand_id = requireId(input.brand_id, "brand_id");
 
     const { price, stock } = this.resolvePriceAndStock(type, input.price, input.stock);
+
+    // Las consultas van despues de las validaciones que no tocan la base.
+    await this.assertCategoryExists(category_id);
+    await this.assertBrandExists(brand_id);
 
     const toCreate: Omit<Product, "id"> = {
       name,
@@ -102,11 +107,11 @@ export class ProductService {
     }
 
     if (input.category_id !== undefined) {
-      data.category_id = this.validateForeignId(input.category_id, "category_id");
+      data.category_id = requireId(input.category_id, "category_id");
     }
 
     if (input.brand_id !== undefined) {
-      data.brand_id = this.validateForeignId(input.brand_id, "brand_id");
+      data.brand_id = requireId(input.brand_id, "brand_id");
     }
 
     let newType: ProductType | undefined;
@@ -131,6 +136,14 @@ export class ProductService {
 
     if (Object.keys(data).length === 0) {
       throw new ValidationError("El body no puede estar vacío");
+    }
+
+    // Solo se consultan la categoria y la marca que vienen en el body.
+    if (data.category_id !== undefined) {
+      await this.assertCategoryExists(data.category_id);
+    }
+    if (data.brand_id !== undefined) {
+      await this.assertBrandExists(data.brand_id);
     }
 
     return this.repository.update(id, data);
@@ -191,15 +204,22 @@ export class ProductService {
     return value as ProductType;
   }
 
-  private validateForeignId(value: unknown, fieldName: string): string {
-    if (typeof value !== "string" || value.trim().length === 0) {
-      throw new ValidationError(`El campo '${fieldName}' es obligatorio`);
+  // category_id y brand_id son referencias a otra coleccion de Mongo, sin FK que las
+  // garantice: se verifica a mano que existan.
+  private async assertCategoryExists(id: string): Promise<void> {
+    if (!(await this.categoryRepository.getById(id))) {
+      throw new ValidationError("La categoría indicada no existe");
     }
-    return value.trim();
+  }
+
+  private async assertBrandExists(id: string): Promise<void> {
+    if (!(await this.brandRepository.getById(id))) {
+      throw new ValidationError("La marca indicada no existe");
+    }
   }
 
   // Si type==='encargo' => price=null, stock=0 (ignora lo que venga).
-  // Si type==='stock' => exige price>0 y stock>=0.
+  // Si type==='stock' => exige price>0 (admite decimales) y stock entero >=0.
   private resolvePriceAndStock(
     type: ProductType,
     priceInput: unknown,
@@ -225,8 +245,8 @@ export class ProductService {
     }
 
     if (stockInput !== undefined) {
-      if (typeof stockInput !== "number" || !Number.isFinite(stockInput) || stockInput < 0) {
-        throw new ValidationError("El campo 'stock' debe ser un número mayor o igual a 0");
+      if (typeof stockInput !== "number" || !Number.isInteger(stockInput) || stockInput < 0) {
+        throw new ValidationError("El campo 'stock' debe ser un número entero mayor o igual a 0");
       }
       stock = stockInput;
     }

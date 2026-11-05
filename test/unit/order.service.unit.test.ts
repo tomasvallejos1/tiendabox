@@ -62,6 +62,14 @@ class FakeProductRepository implements IProductRepository {
     if (product) product.stock += quantity;
   }
 
+  async countActiveByCategory(): Promise<number> {
+    throw new Error("no usado en estos tests");
+  }
+
+  async countActiveByBrand(): Promise<number> {
+    throw new Error("no usado en estos tests");
+  }
+
   // Helper de asercion: stock actual sin pasar por la semantica de is_active.
   stockOf(id: string): number {
     return this.products.get(id)?.stock ?? -1;
@@ -114,11 +122,22 @@ class FakeOrderRepository implements IOrderRepository {
     return statusFilter ? all.filter((order) => order.status === statusFilter) : all;
   }
 
-  async updateStatus(id: string, status: OrderStatus): Promise<Order | null> {
+  async existsForCustomer(): Promise<boolean> {
+    throw new Error("no usado en estos tests");
+  }
+
+  // Simula otro request que cambia el pedido entre la lectura del service y su escritura.
+  beforeUpdateIf: ((order: Order) => void) | null = null;
+
+  // Replica el UPDATE ... WHERE status = ANY(from) de Postgres: el chequeo y la escritura
+  // son un solo paso sincronico, sin awaits en el medio que permitan intercalar otro request.
+  async updateStatusIf(id: string, from: OrderStatus[], to: OrderStatus): Promise<Order | null> {
     const order = this.orders.get(id);
     if (!order) return null;
-    order.status = status;
-    return order;
+    this.beforeUpdateIf?.(order);
+    if (!from.includes(order.status)) return null;
+    order.status = to;
+    return { ...order };
   }
 }
 
@@ -157,6 +176,10 @@ class FakeCartRepository implements ICartRepository {
   async clear(cartId: string): Promise<void> {
     const cart = this.carts.get(cartId);
     if (cart) cart.items = [];
+  }
+
+  async deleteByCustomerId(): Promise<void> {
+    throw new Error("no usado en estos tests");
   }
 }
 
@@ -555,6 +578,74 @@ describe("OrderService.createOrder", () => {
     expect(ctx.productRepository.stockOf("p2")).toBe(4);
   });
 
+  describe("items mal formados", () => {
+    const ITEM_INVALIDO = "Cada item debe tener 'product_id' y 'quantity'";
+
+    // Antes, [null] daba 500 (raw.quantity sobre null) y un product_id objeto llegaba a
+    // Mongo como operador: { "$gt": "" } matcheaba el primer producto de la coleccion.
+    it.each([
+      { items: [null], mensaje: ITEM_INVALIDO, caso: "[null]" },
+      { items: ["p1"], mensaje: ITEM_INVALIDO, caso: "un item string" },
+      { items: [[1, 2]], mensaje: ITEM_INVALIDO, caso: "un item array" },
+      { items: [{ quantity: 1 }], mensaje: ITEM_INVALIDO, caso: "un item sin product_id" },
+      { items: [{ product_id: "p1" }], mensaje: ITEM_INVALIDO, caso: "un item sin quantity" },
+      {
+        items: [{ product_id: { $gt: "" }, quantity: 1 }],
+        mensaje: "El campo 'product_id' es obligatorio",
+        caso: "product_id objeto",
+      },
+      {
+        items: [{ product_id: 7, quantity: 1 }],
+        mensaje: "El campo 'product_id' es obligatorio",
+        caso: "product_id numero",
+      },
+      {
+        items: [{ product_id: "p1", quantity: 1.5 }],
+        mensaje: "La cantidad de cada item debe ser un entero mayor a 0",
+        caso: "quantity decimal",
+      },
+      { items: "abc", mensaje: "El campo 'items' debe ser una lista", caso: 'items "abc"' },
+      { items: null, mensaje: "El campo 'items' debe ser una lista", caso: "items null" },
+      { items: { 0: "p1" }, mensaje: "El campo 'items' debe ser una lista", caso: "items objeto" },
+    ])(
+      "rechaza $caso sin tocar stock ni crear pedido (cliente y owner)",
+      async ({ items, mensaje }) => {
+        const getById = jest.spyOn(ctx.productRepository, "getById");
+
+        for (const [userId, role] of [
+          ["user-1", "cliente"],
+          ["user-owner", "owner"],
+        ] as const) {
+          const creation = ctx.service.createOrder(userId, role, {
+            customer_id: "cus-1",
+            delivery_type: "retiro",
+            // El primer item es valido: nada del pedido se procesa si uno esta mal formado.
+            items: Array.isArray(items) ? [{ product_id: "p1", quantity: 1 }, ...items] : items,
+          });
+
+          await expect(creation).rejects.toThrow(new ValidationError(mensaje));
+        }
+
+        expect(getById).not.toHaveBeenCalled();
+        expect(ctx.productRepository.stockOf("p1")).toBe(8);
+        expect(ctx.orderRepository.orders.size).toBe(0);
+      },
+    );
+
+    it("el cliente que manda items vacios usa su carrito", async () => {
+      const cart = await ctx.cartRepository.createForCustomer("cus-1");
+      await ctx.cartRepository.addItem(cart.id, "p2", 1);
+
+      const order = await ctx.service.createOrder("user-1", "cliente", {
+        delivery_type: "retiro",
+        items: [],
+      });
+
+      expect(order.items.map((item) => item.product_id)).toEqual(["p2"]);
+      expect(ctx.cartRepository.carts.get(cart.id)?.items).toEqual([]);
+    });
+  });
+
   // Un cliente no puede crear pedidos a nombre de otro.
   it("ignora el customer_id cuando el pedido lo crea un cliente", async () => {
     const order = await ctx.service.createOrder("user-1", "cliente", {
@@ -599,6 +690,28 @@ describe("OrderService.changeStatus", () => {
 
   it("devuelve null si la orden no existe", async () => {
     expect(await ctx.service.changeStatus("order-inexistente", "confirmado")).toBeNull();
+  });
+
+  // Otro request cancela el pedido entre la lectura y la escritura: el avance no se aplica.
+  it("rechaza el avance si el pedido cambio de estado mientras se procesaba", async () => {
+    ctx.orderRepository.beforeUpdateIf = (order) => {
+      order.status = "cancelado";
+    };
+
+    await expect(ctx.service.changeStatus(orderId, "confirmado")).rejects.toThrow(
+      new ValidationError("El pedido cambió de estado mientras se procesaba. Volvé a cargarlo."),
+    );
+    expect(ctx.orderRepository.orders.get(orderId)?.status).toBe("cancelado");
+  });
+
+  it("de dos avances simultaneos al mismo estado, solo uno se aplica", async () => {
+    const results = await Promise.allSettled([
+      ctx.service.changeStatus(orderId, "confirmado"),
+      ctx.service.changeStatus(orderId, "confirmado"),
+    ]);
+
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    expect(ctx.orderRepository.orders.get(orderId)?.status).toBe("confirmado");
   });
 });
 
@@ -683,6 +796,87 @@ describe("OrderService.cancelOrder", () => {
       "El pedido ya está cancelado",
     );
     expect(ctx.productRepository.stockOf("p1")).toBe(8);
+  });
+
+  it("al cancelar repone el stock una sola vez", async () => {
+    const increment = jest.spyOn(ctx.productRepository, "incrementStock");
+
+    await ctx.service.cancelOrder(orderId, "user-1", "cliente");
+
+    expect(increment).toHaveBeenCalledTimes(1);
+    expect(increment).toHaveBeenCalledWith("p1", 3);
+    expect(ctx.productRepository.stockOf("p1")).toBe(8);
+  });
+
+  // Otro request cambia el estado entre el chequeo previo y la escritura: updateStatusIf
+  // devuelve null, no se repone stock y el error depende del estado en que quedo.
+  it.each([
+    {
+      role: "owner",
+      userId: "user-owner",
+      previo: [],
+      ahora: "cancelado" as OrderStatus,
+      mensaje: "El pedido ya está cancelado",
+    },
+    {
+      role: "owner",
+      userId: "user-owner",
+      previo: ["confirmado", "en_preparacion", "listo_para_retirar"] as OrderStatus[],
+      ahora: "entregado" as OrderStatus,
+      mensaje: "No se puede cancelar un pedido ya entregado",
+    },
+    {
+      role: "cliente",
+      userId: "user-1",
+      previo: [],
+      ahora: "confirmado" as OrderStatus,
+      mensaje: "Solo se puede cancelar un pedido pendiente",
+    },
+    {
+      role: "cliente",
+      userId: "user-1",
+      previo: [],
+      ahora: "cancelado" as OrderStatus,
+      mensaje: "Solo se puede cancelar un pedido pendiente",
+    },
+  ])(
+    "$role: si el pedido pasa a '$ahora' durante la cancelacion, no repone stock",
+    async ({ role, userId, previo, ahora, mensaje }) => {
+      for (const status of previo) {
+        await ctx.service.changeStatus(orderId, status);
+      }
+      ctx.orderRepository.beforeUpdateIf = (order) => {
+        order.status = ahora;
+      };
+      const increment = jest.spyOn(ctx.productRepository, "incrementStock");
+
+      await expect(ctx.service.cancelOrder(orderId, userId, role)).rejects.toThrow(
+        new ValidationError(mensaje),
+      );
+      expect(increment).not.toHaveBeenCalled();
+      expect(ctx.productRepository.stockOf("p1")).toBe(5);
+      expect(ctx.orderRepository.orders.get(orderId)?.status).toBe(ahora);
+    },
+  );
+
+  // Regresion: cuatro cancelaciones simultaneas respondian todas OK y reponian el stock
+  // cuatro veces. Todas leen "pendiente" antes de que alguna escriba.
+  it.each([
+    ["cliente", "user-1"],
+    ["owner", "user-owner"],
+  ])("de cuatro cancelaciones simultaneas (%s) solo una repone stock", async (role, userId) => {
+    const results = await Promise.allSettled(
+      Array.from({ length: 4 }, () => ctx.service.cancelOrder(orderId, userId, role)),
+    );
+
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    const rejected = results.filter((r) => r.status === "rejected");
+    expect(rejected).toHaveLength(3);
+    for (const r of rejected) {
+      expect((r as PromiseRejectedResult).reason).toBeInstanceOf(ValidationError);
+    }
+    expect(ctx.productRepository.stockOf("p1")).toBe(8);
+    expect(ctx.orderRepository.orders.get(orderId)?.status).toBe("cancelado");
   });
 });
 

@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { Pool, PoolClient } from "pg";
+import { isoDate } from "../db/sql-dates";
 import { Order, OrderItem, OrderStatus } from "./order.entity";
 import { IOrderRepository } from "./order.repository.interface";
 
@@ -29,7 +30,7 @@ export class OrderRepositoryPostgres implements IOrderRepository {
       `INSERT INTO orders (id, customer_id, status, delivery_type, delivery_address, total)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id, customer_id, status, delivery_type, delivery_address,
-                 total::text, created_at::text AS created_at`,
+                 total::text, ${isoDate("created_at")}`,
       [
         orderId,
         data.customer_id,
@@ -73,7 +74,7 @@ export class OrderRepositoryPostgres implements IOrderRepository {
   async getById(id: string): Promise<Order | null> {
     const result = await this.pool.query(
       `SELECT id, customer_id, status, delivery_type, delivery_address,
-              total::text, created_at::text AS created_at
+              total::text, ${isoDate("created_at")}
        FROM orders WHERE id = $1`,
       [id],
     );
@@ -89,9 +90,9 @@ export class OrderRepositoryPostgres implements IOrderRepository {
   async getByCustomerId(customerId: string): Promise<Order[]> {
     const result = await this.pool.query(
       `SELECT id, customer_id, status, delivery_type, delivery_address,
-              total::text, created_at::text AS created_at
+              total::text, ${isoDate("created_at")}
        FROM orders WHERE customer_id = $1
-       ORDER BY created_at DESC`,
+       ORDER BY orders.created_at DESC`,
       [customerId],
     );
 
@@ -105,7 +106,7 @@ export class OrderRepositoryPostgres implements IOrderRepository {
 
   async getAll(statusFilter?: string): Promise<Order[]> {
     let query = `SELECT id, customer_id, status, delivery_type, delivery_address,
-                        total::text, created_at::text AS created_at
+                        total::text, ${isoDate("created_at")}
                  FROM orders`;
     const params: string[] = [];
 
@@ -114,7 +115,8 @@ export class OrderRepositoryPostgres implements IOrderRepository {
       params.push(statusFilter);
     }
 
-    query += ` ORDER BY created_at DESC`;
+    // orders.created_at es la columna; un created_at suelto apuntaria al alias de texto.
+    query += ` ORDER BY orders.created_at DESC`;
 
     const result = await this.pool.query(query, params);
 
@@ -126,12 +128,22 @@ export class OrderRepositoryPostgres implements IOrderRepository {
     return orders;
   }
 
-  async updateStatus(id: string, status: OrderStatus): Promise<Order | null> {
+  async existsForCustomer(customerId: string): Promise<boolean> {
+    const result = await this.pool.query(`SELECT 1 FROM orders WHERE customer_id = $1 LIMIT 1`, [
+      customerId,
+    ]);
+    return result.rows.length > 0;
+  }
+
+  // La condicion sobre el estado actual va en el mismo UPDATE: Postgres bloquea la fila y,
+  // si otra transaccion la cambio mientras tanto, reevalua el WHERE con el valor nuevo.
+  // Asi, de varios requests simultaneos solo uno modifica la fila; el resto recibe null.
+  async updateStatusIf(id: string, from: OrderStatus[], to: OrderStatus): Promise<Order | null> {
     const result = await this.pool.query(
-      `UPDATE orders SET status = $1 WHERE id = $2
+      `UPDATE orders SET status = $1 WHERE id = $2 AND status = ANY($3::text[])
        RETURNING id, customer_id, status, delivery_type, delivery_address,
-                 total::text, created_at::text AS created_at`,
-      [status, id],
+                 total::text, ${isoDate("created_at")}`,
+      [to, id, from],
     );
 
     if (result.rows.length === 0) {

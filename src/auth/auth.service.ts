@@ -3,19 +3,7 @@ import { ICustomerRepository } from "../customer/customer.repository.interface";
 import { ISessionRepository } from "../session/session.repository.interface";
 import { validatePassword } from "../user/password";
 import { ConflictError, ValidationError } from "../errors";
-
-// Repositorios que el alta usa dentro de una misma transaccion.
-export interface RegistrationRepositories {
-  users: IUserRepository;
-  customers: ICustomerRepository;
-}
-
-// Ejecuta work de forma atomica con repositorios atados a una transaccion: si work lanza,
-// no queda nada guardado. El service no sabe de que base se trata; la implementacion real
-// la arma DatabaseProviderFactory.
-export type RunInTransaction = <T>(
-  work: (repos: RegistrationRepositories) => Promise<T>,
-) => Promise<T>;
+import type { RunInTransaction } from "../db/run-in-transaction";
 
 export class AuthService {
   constructor(
@@ -71,6 +59,10 @@ export class AuthService {
 
     const customer = await this.customerRepo.getByUserId(user.id);
 
+    // Limpieza de las sesiones vencidas de este usuario antes de abrir la nueva. Asi la
+    // tabla sessions no crece sin limite (nada mas las borraba) y no hace falta un proceso
+    // aparte que la purgue: cada usuario limpia lo suyo al volver a entrar.
+    await this.sessionRepo.deleteExpiredByUserId(user.id);
     const session = await this.sessionRepo.create(user.id);
 
     return {
@@ -113,8 +105,7 @@ export class AuthService {
       throw new ValidationError("La nueva contraseña debe ser distinta de la actual");
     }
 
-    // Secuencial y no en runInTransaction: esa transaccion es la del alta y solo expone users
-    // y customers, no sesiones. Va primero la contraseña: si despues falla el borrado, la
+    // Secuencial, sin transaccion. Va primero la contraseña: si despues falla el borrado, la
     // vieja ya no sirve para entrar y las otras sesiones mueren solas al vencer (24 h).
     await this.userRepo.update(userId, { password: newPassword });
     await this.sessionRepo.deleteByUserIdExcept(userId, currentToken);

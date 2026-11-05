@@ -1,12 +1,16 @@
 import { Category } from "./category.entity";
 import { ICategoryRepository } from "./category.repository.interface";
+import type { IProductRepository } from "../product/product.repository.interface";
 import { ConflictError, ValidationError } from "../errors";
 
 const NAME_MAX_LENGTH = 100;
 
 // Reglas de negocio de Category. Delega la persistencia en el repositorio.
 export class CategoryService {
-  constructor(private readonly repository: ICategoryRepository) {}
+  constructor(
+    private readonly repository: ICategoryRepository,
+    private readonly productRepository: IProductRepository,
+  ) {}
 
   async getAll(): Promise<Category[]> {
     return this.repository.getAll();
@@ -47,7 +51,15 @@ export class CategoryService {
     return this.repository.update(id, data);
   }
 
+  // Mongo no tiene claves foraneas: si se borrara con productos, quedarian apuntando a
+  // una categoría que ya no existe. Los productos dados de baja no cuentan.
   async delete(id: string): Promise<boolean> {
+    const count = await this.productRepository.countActiveByCategory(id);
+    if (count > 0) {
+      throw new ConflictError(
+        `No se puede eliminar la categoría: tiene ${count} ${count === 1 ? "producto" : "productos"}`,
+      );
+    }
     return this.repository.delete(id);
   }
 

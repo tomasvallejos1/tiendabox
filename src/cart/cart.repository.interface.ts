@@ -8,4 +8,6 @@ export interface ICartRepository {
   updateItemQuantity(cartId: string, productId: string, quantity: number): Promise<void>;
   removeItem(cartId: string, productId: string): Promise<boolean>;
   clear(cartId: string): Promise<void>;
+  // Borra el carrito del cliente y sus items. Si no tiene carrito, no hace nada.
+  deleteByCustomerId(customerId: string): Promise<void>;
 }

@@ -48,6 +48,42 @@ describe("errorHandler", () => {
     expect(consoleError).toHaveBeenCalledWith(internal);
   });
 
+  // express.json() rechaza el body antes de llegar a los controllers: el error viene
+  // directo aca. Es un error del cliente, no del servidor.
+  it("un JSON mal formado en el body da 400 con un mensaje claro", () => {
+    // Misma forma que el error de body-parser para '{bad json'.
+    const parseError = Object.assign(new SyntaxError("Unexpected token b in JSON"), {
+      status: 400,
+      statusCode: 400,
+      type: "entity.parse.failed",
+      body: "{bad json",
+    });
+
+    const res = handle(parseError);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ error: "El cuerpo de la petición no es un JSON válido" });
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
+  it("reconoce el error de JSON por SyntaxError con status 400 aunque no traiga type", () => {
+    const res = handle(
+      Object.assign(new SyntaxError("Unexpected end of JSON input"), { status: 400 }),
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body).toEqual({ error: "El cuerpo de la petición no es un JSON válido" });
+  });
+
+  // Un SyntaxError propio del servidor (por ejemplo, un JSON.parse sobre datos internos)
+  // sigue siendo un 500: no es culpa del cliente.
+  it("un SyntaxError que no viene del body sigue dando 500", () => {
+    const res = handle(new SyntaxError("Unexpected token"));
+
+    expect(res.statusCode).toBe(500);
+    expect(res.body).toEqual({ error: "Error interno del servidor" });
+  });
+
   it("también da 500 si lo lanzado no es un Error", () => {
     const res = handle("algo raro");
 

@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { Customer, CustomerWithEmail } from "./customer.entity";
 import { ICustomerRepository } from "./customer.repository.interface";
 import type { IUserRepository } from "../user/user.repository.interface";
+import type { RunInTransaction } from "../db/run-in-transaction";
 import { ConflictError, ForbiddenError, ValidationError } from "../errors";
 
 // Valores validos para tax_status.
@@ -29,6 +30,7 @@ export class CustomerService {
   constructor(
     private readonly repository: ICustomerRepository,
     private readonly userRepository: IUserRepository,
+    private readonly runInTransaction: RunInTransaction,
   ) {}
 
   // Suma el email de la cuenta web de cada cliente (null para los de local).
@@ -176,8 +178,29 @@ export class CustomerService {
     return this.repository.update(id, data);
   }
 
+  // Un cliente con pedidos no se borra: los pedidos son registros comerciales. Sin pedidos,
+  // se borra todo lo suyo en una sola transaccion: carrito (con sus items), cliente y, si
+  // tiene cuenta web, sus sesiones y su usuario. Si quedara el usuario suelto, podria
+  // iniciar sesion sin poder comprar y su email no se podria volver a usar.
+  // El orden respeta las claves foraneas: carrito -> cliente -> sesiones -> usuario.
+  // Devuelve false si el cliente no existe.
   async delete(id: string): Promise<boolean> {
-    return this.repository.delete(id);
+    return this.runInTransaction(async ({ customers, orders, carts, sessions, users }) => {
+      const customer = await customers.getById(id);
+      if (!customer) return false;
+
+      if (await orders.existsForCustomer(id)) {
+        throw new ConflictError("No se puede eliminar un cliente con pedidos registrados");
+      }
+
+      await carts.deleteByCustomerId(id);
+      await customers.delete(id);
+      if (customer.user_id !== null) {
+        await sessions.deleteByUserId(customer.user_id);
+        await users.delete(customer.user_id);
+      }
+      return true;
+    });
   }
 
   // user_id opcional: si no viene o viene vacio es un cliente de local (null).

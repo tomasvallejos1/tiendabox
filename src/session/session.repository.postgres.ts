@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { Pool, PoolClient } from "pg";
+import { isoDate } from "../db/sql-dates";
 import { Session } from "./session.entity";
 import { ISessionRepository } from "./session.repository.interface";
 
@@ -16,7 +17,7 @@ export class SessionRepositoryPostgres implements ISessionRepository {
     const result = await this.pool.query(
       `INSERT INTO sessions (token, user_id, expires_at)
        VALUES ($1, $2, $3)
-       RETURNING token, user_id, expires_at::text AS expires_at`,
+       RETURNING token, user_id, ${isoDate("expires_at")}`,
       [token, userId, exp],
     );
     return this.toEntity(result.rows[0]);
@@ -24,7 +25,7 @@ export class SessionRepositoryPostgres implements ISessionRepository {
 
   async getByToken(token: string): Promise<Session | null> {
     const result = await this.pool.query(
-      `SELECT token, user_id, expires_at::text AS expires_at
+      `SELECT token, user_id, ${isoDate("expires_at")}
        FROM sessions WHERE token = $1`,
       [token],
     );
@@ -40,6 +41,19 @@ export class SessionRepositoryPostgres implements ISessionRepository {
     const result = await this.pool.query(
       `DELETE FROM sessions WHERE user_id = $1 AND token <> $2`,
       [userId, keepToken],
+    );
+    return result.rowCount ?? 0;
+  }
+
+  async deleteByUserId(userId: string): Promise<number> {
+    const result = await this.pool.query(`DELETE FROM sessions WHERE user_id = $1`, [userId]);
+    return result.rowCount ?? 0;
+  }
+
+  async deleteExpiredByUserId(userId: string): Promise<number> {
+    const result = await this.pool.query(
+      `DELETE FROM sessions WHERE user_id = $1 AND expires_at <= NOW()`,
+      [userId],
     );
     return result.rowCount ?? 0;
   }

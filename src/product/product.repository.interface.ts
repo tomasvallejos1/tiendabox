@@ -21,4 +21,8 @@ export interface IProductRepository {
   decrementStock(id: string, quantity: number): Promise<boolean>;
   // Reposicion atomica de stock (cancelacion de pedido o rollback parcial).
   incrementStock(id: string, quantity: number): Promise<void>;
+  // Cantidad de productos activos de la categoria o marca. Los dados de baja no se cuentan:
+  // no se ven en ningun lado y no deben impedir borrar la categoria o la marca.
+  countActiveByCategory(categoryId: string): Promise<number>;
+  countActiveByBrand(brandId: string): Promise<number>;
 }

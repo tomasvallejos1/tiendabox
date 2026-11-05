@@ -26,13 +26,15 @@ async function seed(): Promise<void> {
   const categoryRepository = factory.createCategoryRepository();
   const brandRepository = factory.createBrandRepository();
   const productRepository = factory.createProductRepository();
+  const customerRepository = factory.createCustomerRepository();
+  const runInTransaction = factory.createTransaction();
 
   await categoryRepository.createIndexes();
 
-  const userService = new UserService(userRepository);
-  const customerService = new CustomerService(factory.createCustomerRepository(), userRepository);
-  const categoryService = new CategoryService(categoryRepository);
-  const brandService = new BrandService(brandRepository);
+  const userService = new UserService(userRepository, customerRepository, runInTransaction);
+  const customerService = new CustomerService(customerRepository, userRepository, runInTransaction);
+  const categoryService = new CategoryService(categoryRepository, productRepository);
+  const brandService = new BrandService(brandRepository, productRepository);
   const productService = new ProductService(productRepository, categoryRepository, brandRepository);
 
   for (const owner of SEED_OWNERS) {

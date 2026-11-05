@@ -91,6 +91,53 @@ describe("SessionRepositoryPostgres — integración con BD real", () => {
     await expect(repository.getByToken("token-inexistente")).resolves.toBeNull();
   });
 
+  it("expires_at sale en ISO 8601 con Z", async () => {
+    const session = await repository.create(userId);
+
+    expect(session.expires_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    await expect(repository.getByToken(session.token)).resolves.toEqual(session);
+  });
+
+  // Crea una sesion ya vencida, escribiendo expires_at directo en la base.
+  async function createExpired(user: string): Promise<string> {
+    const session = await repository.create(user);
+    await client!.query(
+      "UPDATE sessions SET expires_at = NOW() - INTERVAL '1 hour' WHERE token = $1",
+      [session.token],
+    );
+    return session.token;
+  }
+
+  it("deleteExpiredByUserId borra solo las vencidas de ese usuario", async () => {
+    const otherUserId = (
+      await new UserRepositoryPostgres(client!).create({ ...validUser, email: "otro@example.com" })
+    ).id;
+    const expired1 = await createExpired(userId);
+    const expired2 = await createExpired(userId);
+    const valid = await repository.create(userId);
+    const expiredOther = await createExpired(otherUserId);
+
+    await expect(repository.deleteExpiredByUserId(userId)).resolves.toBe(2);
+
+    await expect(repository.getByToken(expired1)).resolves.toBeNull();
+    await expect(repository.getByToken(expired2)).resolves.toBeNull();
+    await expect(repository.getByToken(valid.token)).resolves.not.toBeNull();
+    await expect(repository.getByToken(expiredOther)).resolves.not.toBeNull();
+  });
+
+  it("deleteByUserId borra todas las sesiones del usuario y ninguna de otro", async () => {
+    const otherUserId = (
+      await new UserRepositoryPostgres(client!).create({ ...validUser, email: "otro@example.com" })
+    ).id;
+    await repository.create(userId);
+    await createExpired(userId);
+    const other = await repository.create(otherUserId);
+
+    await expect(repository.deleteByUserId(userId)).resolves.toBe(2);
+    await expect(repository.deleteByUserId(userId)).resolves.toBe(0);
+    await expect(repository.getByToken(other.token)).resolves.not.toBeNull();
+  });
+
   it("deleteByToken elimina la sesión y devuelve false si ya no existe", async () => {
     const session = await repository.create(userId);
 

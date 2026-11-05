@@ -3,6 +3,7 @@ import { ICartRepository } from "./cart.repository.interface";
 import { IProductRepository } from "../product/product.repository.interface";
 import { ICustomerRepository } from "../customer/customer.repository.interface";
 import { ValidationError } from "../errors";
+import { requireId } from "../validation";
 
 // Logica de negocio del carrito. Valida productos y stock antes de operar.
 export class CartService {
@@ -31,7 +32,10 @@ export class CartService {
     return this.toDetail(await this.cartRepository.createForCustomer(customerId));
   }
 
-  async addItem(userId: string, productId: string, quantity: number): Promise<CartDetail> {
+  // productId llega del body sin tipar: se valida antes de tocar la base, para que un
+  // objeto como { "$ne": null } no llegue a Mongo como operador.
+  async addItem(userId: string, productIdInput: unknown, quantity: number): Promise<CartDetail> {
+    const productId = requireId(productIdInput, "product_id");
     const customerId = await this.resolveCustomerId(userId);
 
     if (!Number.isInteger(quantity) || quantity <= 0) {

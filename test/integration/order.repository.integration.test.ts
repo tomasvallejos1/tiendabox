@@ -6,10 +6,17 @@ import { PostgreSqlContainer } from "@testcontainers/postgresql";
 import type { StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { OrderRepositoryPostgres } from "../../src/order/order.repository.postgres";
 import { CustomerRepositoryPostgres } from "../../src/customer/customer.repository.postgres";
-import { validNewCustomer, validNewOrder } from "../fixtures";
+import { UserRepositoryPostgres } from "../../src/user/user.repository.postgres";
+import { SessionRepositoryPostgres } from "../../src/session/session.repository.postgres";
+import { CartRepositoryPostgres } from "../../src/cart/cart.repository.postgres";
+import { validNewCustomer, validNewOrder, validUser } from "../fixtures";
+
+// Fecha ISO 8601 en UTC con milisegundos, como la devuelven todos los repos Postgres.
+const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 
 describe("OrderRepositoryPostgres — integración con BD real", () => {
   let pool: Pool;
+  let schema: string;
   let repository: OrderRepositoryPostgres;
   let customerRepository: CustomerRepositoryPostgres;
   let client: PoolClient | undefined;
@@ -27,7 +34,7 @@ describe("OrderRepositoryPostgres — integración con BD real", () => {
       query_timeout: 5000,
     });
     // El esquema real de produccion: si se escribiera a mano, el test dejaria de probarlo.
-    const schema = await readFile(resolve(__dirname, "../../src/db/sql/init.sql"), "utf8");
+    schema = await readFile(resolve(__dirname, "../../src/db/sql/init.sql"), "utf8");
     await pool.query(schema);
   }, 180_000);
 
@@ -112,7 +119,7 @@ describe("OrderRepositoryPostgres — integración con BD real", () => {
       total: 300,
       items: [{ ...validNewOrder.items[0]!, unit_price: 150 }],
     });
-    await repository.updateStatus(first.id, "confirmado");
+    await repository.updateStatusIf(first.id, ["pendiente"], "confirmado");
 
     const found = await repository.getById(first.id);
 
@@ -165,8 +172,8 @@ describe("OrderRepositoryPostgres — integración con BD real", () => {
     const pending = await repository.create({ ...validNewOrder, customer_id: customerId });
     const confirmed = await repository.create({ ...validNewOrder, customer_id: customerId });
     const cancelled = await repository.create({ ...validNewOrder, customer_id: customerId });
-    await repository.updateStatus(confirmed.id, "confirmado");
-    await repository.updateStatus(cancelled.id, "cancelado");
+    await repository.updateStatusIf(confirmed.id, ["pendiente"], "confirmado");
+    await repository.updateStatusIf(cancelled.id, ["pendiente"], "cancelado");
 
     const onlyConfirmed = await repository.getAll("confirmado");
     const all = await repository.getAll();
@@ -177,17 +184,165 @@ describe("OrderRepositoryPostgres — integración con BD real", () => {
     );
   });
 
-  it("updateStatus cambia el estado y devuelve la orden actualizada con sus items", async () => {
+  it("updateStatusIf cambia el estado si el actual está en `from` y devuelve la orden con sus items", async () => {
     const created = await repository.create({ ...validNewOrder, customer_id: customerId });
 
-    const updated = await repository.updateStatus(created.id, "en_preparacion");
+    const updated = await repository.updateStatusIf(
+      created.id,
+      ["pendiente", "confirmado"],
+      "en_preparacion",
+    );
 
     expect(updated).toMatchObject({ id: created.id, status: "en_preparacion", total: 200 });
-    expect(updated!.items).toHaveLength(1);
+    expect(updated!.items).toEqual(created.items);
     await expect(repository.getById(created.id)).resolves.toMatchObject({
       status: "en_preparacion",
     });
-    await expect(repository.updateStatus("no-existe", "confirmado")).resolves.toBeNull();
+  });
+
+  it("updateStatusIf devuelve null y no toca la orden si el estado actual no está en `from`", async () => {
+    const created = await repository.create({ ...validNewOrder, customer_id: customerId });
+    await repository.updateStatusIf(created.id, ["pendiente"], "cancelado");
+
+    const result = await repository.updateStatusIf(
+      created.id,
+      ["pendiente", "confirmado"],
+      "en_preparacion",
+    );
+
+    expect(result).toBeNull();
+    await expect(repository.getById(created.id)).resolves.toMatchObject({ status: "cancelado" });
+  });
+
+  it("updateStatusIf devuelve null para una orden inexistente", async () => {
+    await expect(
+      repository.updateStatusIf("no-existe", ["pendiente"], "confirmado"),
+    ).resolves.toBeNull();
+  });
+
+  // Prueba del arreglo de la cancelacion concurrente: cuatro PUT /cancel simultaneos
+  // respondian 200 y reponian el stock cuatro veces.
+  // Corre por fuera de la transaccion del test: con un unico PoolClient las consultas se
+  // encolan una detras de otra y no habria concurrencia real. Con el pool, cada llamada
+  // toma su propia conexion y los cinco UPDATE compiten por la misma fila. Por eso los
+  // datos se confirman y se borran a mano al final.
+  it("de 5 updateStatusIf simultáneos sobre el mismo pedido, exactamente uno lo cambia", async () => {
+    const poolRepository = new OrderRepositoryPostgres(pool);
+    const customer = await new CustomerRepositoryPostgres(pool).create(validNewCustomer);
+    const order = await poolRepository.create({ ...validNewOrder, customer_id: customer.id });
+
+    try {
+      const results = await Promise.all(
+        Array.from({ length: 5 }, () =>
+          poolRepository.updateStatusIf(order.id, ["pendiente"], "cancelado"),
+        ),
+      );
+
+      const ganadores = results.filter((result) => result !== null);
+      expect(ganadores).toHaveLength(1);
+      expect(ganadores[0]).toMatchObject({ id: order.id, status: "cancelado" });
+      expect(results.filter((result) => result === null)).toHaveLength(4);
+      await expect(poolRepository.getById(order.id)).resolves.toMatchObject({
+        status: "cancelado",
+      });
+    } finally {
+      await pool.query("DELETE FROM order_items WHERE order_id = $1", [order.id]);
+      await pool.query("DELETE FROM orders WHERE id = $1", [order.id]);
+      await pool.query("DELETE FROM customers WHERE id = $1", [customer.id]);
+    }
+  });
+
+  // Regresion: created_at salia como "2026-11-05 21:14:10", sin zona, y el front lo leia
+  // como hora argentina: corria los pedidos tres horas.
+  it("created_at sale en ISO 8601 con Z y corresponde al momento de la creación", async () => {
+    const created = await repository.create({ ...validNewOrder, customer_id: customerId });
+    const found = await repository.getById(created.id);
+
+    for (const createdAt of [created.created_at, found!.created_at]) {
+      expect(createdAt).toMatch(ISO_UTC);
+      expect(Math.abs(new Date(createdAt).getTime() - Date.now())).toBeLessThan(60_000);
+    }
+  });
+
+  describe("migración de fechas a TIMESTAMPTZ (init.sql)", () => {
+    const DATE_COLUMNS = [
+      ["users", "created_at"],
+      ["customers", "created_at"],
+      ["sessions", "created_at"],
+      ["carts", "updated_at"],
+      ["orders", "created_at"],
+    ] as const;
+
+    async function columnTypes(): Promise<string[]> {
+      const types: string[] = [];
+      for (const [table, column] of DATE_COLUMNS) {
+        const { rows } = await client!.query(
+          `SELECT data_type FROM information_schema.columns
+           WHERE table_name = $1 AND column_name = $2`,
+          [table, column],
+        );
+        types.push(rows[0].data_type);
+      }
+      return types;
+    }
+
+    // Valor exacto de cada fecha, tal como lo guarda la base.
+    async function dateValues(): Promise<string[]> {
+      const values: string[] = [];
+      for (const [table, column] of DATE_COLUMNS) {
+        const { rows } = await client!.query(
+          `SELECT ${column}::text AS value FROM ${table} ORDER BY 1`,
+        );
+        values.push(...rows.map((row) => `${table}.${column}=${row.value}`));
+      }
+      return values;
+    }
+
+    // El DDL de Postgres es transaccional: el ROLLBACK del afterEach deshace todo.
+    it("correr init.sql dos veces seguidas no cambia los valores", async () => {
+      const user = await new UserRepositoryPostgres(client!).create(validUser);
+      await new SessionRepositoryPostgres(client!).create(user.id);
+      await new CartRepositoryPostgres(client!).createForCustomer(customerId);
+      await repository.create({ ...validNewOrder, customer_id: customerId });
+      const before = await dateValues();
+      expect(before.length).toBeGreaterThanOrEqual(5);
+
+      await client!.query(schema);
+      await client!.query(schema);
+
+      expect(await dateValues()).toEqual(before);
+      expect(await columnTypes()).toEqual(Array(5).fill("timestamp with time zone"));
+    });
+
+    // Una base creada con el esquema viejo (TIMESTAMP sin zona) guardaba la hora UTC del
+    // contenedor. Al convertir, ese valor se interpreta en la zona de la sesion (UTC, como
+    // en docker-compose), asi que el instante se conserva.
+    it("convierte las columnas de una base vieja sin mover el instante guardado", async () => {
+      for (const [table, column] of DATE_COLUMNS) {
+        await client!.query(`ALTER TABLE ${table} ALTER COLUMN ${column} TYPE TIMESTAMP`);
+      }
+      const order = await repository.create({ ...validNewOrder, customer_id: customerId });
+      await client!.query(
+        "UPDATE orders SET created_at = '2026-11-05 21:14:10.223' WHERE id = $1",
+        [order.id],
+      );
+
+      await client!.query(schema);
+
+      expect(await columnTypes()).toEqual(Array(5).fill("timestamp with time zone"));
+      await expect(repository.getById(order.id)).resolves.toMatchObject({
+        created_at: "2026-11-05T21:14:10.223Z",
+      });
+    });
+  });
+
+  it("existsForCustomer indica si el cliente tiene algún pedido, en cualquier estado", async () => {
+    const otherCustomerId = (await customerRepository.create(validNewCustomer)).id;
+    const order = await repository.create({ ...validNewOrder, customer_id: customerId });
+    await repository.updateStatusIf(order.id, ["pendiente"], "cancelado");
+
+    await expect(repository.existsForCustomer(customerId)).resolves.toBe(true);
+    await expect(repository.existsForCustomer(otherCustomerId)).resolves.toBe(false);
   });
 
   // total es NUMERIC(12,2): con un float de JS se perderian centavos.

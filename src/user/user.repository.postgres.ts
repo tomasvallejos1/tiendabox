@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { Pool, PoolClient } from "pg";
+import { isoDate } from "../db/sql-dates";
 import { User } from "./user.entity";
 import { IUserRepository } from "./user.repository.interface";
 
@@ -14,7 +15,7 @@ export class UserRepositoryPostgres implements IUserRepository {
     const result = await this.pool.query(
       `INSERT INTO users (id, email, password, role)
        VALUES ($1, $2, $3, $4)
-       RETURNING id, email, password, role, created_at::text AS created_at`,
+       RETURNING id, email, password, role, ${isoDate("created_at")}`,
       [newId, data.email, data.password, data.role],
     );
     return this.toEntity(result.rows[0]);
@@ -22,7 +23,7 @@ export class UserRepositoryPostgres implements IUserRepository {
 
   async getById(id: string): Promise<User | null> {
     const result = await this.pool.query(
-      `SELECT id, email, password, role, created_at::text AS created_at
+      `SELECT id, email, password, role, ${isoDate("created_at")}
        FROM users WHERE id = $1`,
       [id],
     );
@@ -35,7 +36,7 @@ export class UserRepositoryPostgres implements IUserRepository {
       return [];
     }
     const result = await this.pool.query(
-      `SELECT id, email, password, role, created_at::text AS created_at
+      `SELECT id, email, password, role, ${isoDate("created_at")}
        FROM users WHERE id = ANY($1)`,
       [ids],
     );
@@ -44,7 +45,7 @@ export class UserRepositoryPostgres implements IUserRepository {
 
   async getByEmail(email: string): Promise<User | null> {
     const result = await this.pool.query(
-      `SELECT id, email, password, role, created_at::text AS created_at
+      `SELECT id, email, password, role, ${isoDate("created_at")}
        FROM users WHERE LOWER(email) = LOWER($1)`,
       [email],
     );
@@ -53,7 +54,7 @@ export class UserRepositoryPostgres implements IUserRepository {
 
   async getAll(): Promise<User[]> {
     const result = await this.pool.query(
-      `SELECT id, email, password, role, created_at::text AS created_at
+      `SELECT id, email, password, role, ${isoDate("created_at")}
        FROM users`,
     );
     return result.rows.map((row) => this.toEntity(row));
@@ -83,7 +84,7 @@ export class UserRepositoryPostgres implements IUserRepository {
     }
 
     values.push(id);
-    const query = `UPDATE users SET ${fields.join(", ")} WHERE id = $${i} RETURNING id, email, password, role, created_at::text AS created_at`;
+    const query = `UPDATE users SET ${fields.join(", ")} WHERE id = $${i} RETURNING id, email, password, role, ${isoDate("created_at")}`;
     const result = await this.pool.query(query, values);
     return result.rows[0] ? this.toEntity(result.rows[0]) : null;
   }

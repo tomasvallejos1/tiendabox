@@ -101,6 +101,14 @@ export class ProductRepositoryMongoDB implements IProductRepository {
     await this.collection.updateOne({ _id: id }, { $inc: { stock: quantity } });
   }
 
+  async countActiveByCategory(categoryId: string): Promise<number> {
+    return this.collection.countDocuments({ category_id: categoryId, is_active: true });
+  }
+
+  async countActiveByBrand(brandId: string): Promise<number> {
+    return this.collection.countDocuments({ brand_id: brandId, is_active: true });
+  }
+
   private toEntity(doc: ProductDoc): Product {
     return {
       id: doc._id,

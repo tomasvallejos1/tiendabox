@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { Pool, PoolClient } from "pg";
+import { isoDate } from "../db/sql-dates";
 import { Cart, CartItem } from "./cart.entity";
 import { ICartRepository } from "./cart.repository.interface";
 
@@ -11,7 +12,7 @@ export class CartRepositoryPostgres implements ICartRepository {
 
   async getByCustomerId(customerId: string): Promise<Cart | null> {
     const cartResult = await this.pool.query(
-      `SELECT id, customer_id, updated_at::text AS updated_at
+      `SELECT id, customer_id, ${isoDate("updated_at")}
        FROM carts WHERE customer_id = $1`,
       [customerId],
     );
@@ -40,7 +41,7 @@ export class CartRepositoryPostgres implements ICartRepository {
     const result = await this.pool.query(
       `INSERT INTO carts (id, customer_id)
        VALUES ($1, $2)
-       RETURNING id, customer_id, updated_at::text AS updated_at`,
+       RETURNING id, customer_id, ${isoDate("updated_at")}`,
       [newId, customerId],
     );
 
@@ -84,6 +85,15 @@ export class CartRepositoryPostgres implements ICartRepository {
   async clear(cartId: string): Promise<void> {
     await this.pool.query(`DELETE FROM cart_items WHERE cart_id = $1`, [cartId]);
     await this.touchUpdatedAt(cartId);
+  }
+
+  // Los items primero: cart_items.cart_id tiene FK a carts.
+  async deleteByCustomerId(customerId: string): Promise<void> {
+    await this.pool.query(
+      `DELETE FROM cart_items WHERE cart_id IN (SELECT id FROM carts WHERE customer_id = $1)`,
+      [customerId],
+    );
+    await this.pool.query(`DELETE FROM carts WHERE customer_id = $1`, [customerId]);
   }
 
   // Actualiza el timestamp del carrito en cada modificacion.

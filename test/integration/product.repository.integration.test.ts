@@ -130,6 +130,30 @@ describe("ProductRepositoryMongoDB — integración con BD real", () => {
 
   // A proposito: el carrito necesita ver los productos dados de baja para marcarlos como
   // no disponibles en lugar de hacerlos desaparecer.
+  // Los dados de baja no se ven en ningun lado: no pueden impedir borrar la categoria o la marca.
+  it("countActiveByCategory y countActiveByBrand no cuentan los productos con is_active false", async () => {
+    await repository.create({ ...validProduct, category_id: "cat-1", brand_id: "brand-1" });
+    await repository.create({ ...validProduct, category_id: "cat-1", brand_id: "brand-2" });
+    await repository.create({
+      ...validProduct,
+      category_id: "cat-1",
+      brand_id: "brand-1",
+      is_active: false,
+    });
+    const discontinued = await repository.create({
+      ...validProduct,
+      category_id: "cat-2",
+      brand_id: "brand-3",
+    });
+    await repository.softDelete(discontinued.id);
+
+    await expect(repository.countActiveByCategory("cat-1")).resolves.toBe(2);
+    await expect(repository.countActiveByCategory("cat-2")).resolves.toBe(0);
+    await expect(repository.countActiveByCategory("cat-inexistente")).resolves.toBe(0);
+    await expect(repository.countActiveByBrand("brand-1")).resolves.toBe(1);
+    await expect(repository.countActiveByBrand("brand-3")).resolves.toBe(0);
+  });
+
   it("getByIds trae varios en una consulta e incluye los inactivos", async () => {
     const active = await repository.create(validProduct);
     const inactive = await repository.create({ ...validProduct, is_active: false });

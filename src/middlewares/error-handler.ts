@@ -22,6 +22,10 @@ export function errorHandler(
   // eslint-disable-next-line @typescript-eslint/no-unused-vars -- requerido por la aridad
   _next: NextFunction,
 ): void {
+  if (isJsonParseError(err)) {
+    res.status(400).json({ error: "El cuerpo de la petición no es un JSON válido" });
+    return;
+  }
   if (err instanceof ValidationError) {
     res.status(400).json({ error: err.message });
     return;
@@ -36,4 +40,14 @@ export function errorHandler(
   }
   console.error(err);
   res.status(500).json({ error: "Error interno del servidor" });
+}
+
+// express.json() (body-parser) rechaza un body mal formado antes de llegar a las rutas, asi
+// que ningun controller lo ve: el error llega directo aca. Es un SyntaxError con
+// type "entity.parse.failed" y status 400. Es un error del cliente, no del servidor:
+// sin este caso terminaba como 500.
+function isJsonParseError(err: unknown): boolean {
+  if (typeof err !== "object" || err === null) return false;
+  const { type, status } = err as { type?: unknown; status?: unknown };
+  return type === "entity.parse.failed" || (err instanceof SyntaxError && status === 400);
 }

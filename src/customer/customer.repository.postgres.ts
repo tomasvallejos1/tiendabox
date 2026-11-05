@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { Pool, PoolClient } from "pg";
+import { isoDate } from "../db/sql-dates";
 import { Customer } from "./customer.entity";
 import { ICustomerRepository } from "./customer.repository.interface";
 
@@ -14,7 +15,7 @@ export class CustomerRepositoryPostgres implements ICustomerRepository {
     const result = await this.pool.query(
       `INSERT INTO customers (id, user_id, name, government_id, tax_status, phone, address)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING id, user_id, name, government_id, tax_status, phone, address, created_at::text AS created_at`,
+       RETURNING id, user_id, name, government_id, tax_status, phone, address, ${isoDate("created_at")}`,
       [
         newId,
         data.user_id,
@@ -30,7 +31,7 @@ export class CustomerRepositoryPostgres implements ICustomerRepository {
 
   async getById(id: string): Promise<Customer | null> {
     const result = await this.pool.query(
-      `SELECT id, user_id, name, government_id, tax_status, phone, address, created_at::text AS created_at
+      `SELECT id, user_id, name, government_id, tax_status, phone, address, ${isoDate("created_at")}
        FROM customers WHERE id = $1`,
       [id],
     );
@@ -42,7 +43,7 @@ export class CustomerRepositoryPostgres implements ICustomerRepository {
     if (ids.length === 0) return [];
 
     const result = await this.pool.query(
-      `SELECT id, user_id, name, government_id, tax_status, phone, address, created_at::text AS created_at
+      `SELECT id, user_id, name, government_id, tax_status, phone, address, ${isoDate("created_at")}
        FROM customers WHERE id = ANY($1)`,
       [ids],
     );
@@ -51,7 +52,7 @@ export class CustomerRepositoryPostgres implements ICustomerRepository {
 
   async getByUserId(userId: string): Promise<Customer | null> {
     const result = await this.pool.query(
-      `SELECT id, user_id, name, government_id, tax_status, phone, address, created_at::text AS created_at
+      `SELECT id, user_id, name, government_id, tax_status, phone, address, ${isoDate("created_at")}
        FROM customers WHERE user_id = $1`,
       [userId],
     );
@@ -60,7 +61,7 @@ export class CustomerRepositoryPostgres implements ICustomerRepository {
 
   async getAll(): Promise<Customer[]> {
     const result = await this.pool.query(
-      `SELECT id, user_id, name, government_id, tax_status, phone, address, created_at::text AS created_at
+      `SELECT id, user_id, name, government_id, tax_status, phone, address, ${isoDate("created_at")}
        FROM customers`,
     );
     return result.rows.map((row) => this.toEntity(row));
@@ -101,7 +102,7 @@ export class CustomerRepositoryPostgres implements ICustomerRepository {
     }
 
     values.push(id);
-    const query = `UPDATE customers SET ${fields.join(", ")} WHERE id = $${i} RETURNING id, user_id, name, government_id, tax_status, phone, address, created_at::text AS created_at`;
+    const query = `UPDATE customers SET ${fields.join(", ")} WHERE id = $${i} RETURNING id, user_id, name, government_id, tax_status, phone, address, ${isoDate("created_at")}`;
     const result = await this.pool.query(query, values);
     return result.rows[0] ? this.toEntity(result.rows[0]) : null;
   }

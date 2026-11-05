@@ -2,7 +2,8 @@ import { BrandService } from "../../src/brand/brand.service";
 import { Brand } from "../../src/brand/brand.entity";
 import { IBrandRepository } from "../../src/brand/brand.repository.interface";
 import { ConflictError, ValidationError } from "../../src/errors";
-import { validBrand } from "../fixtures";
+import type { IProductRepository } from "../../src/product/product.repository.interface";
+import { stubRepository, validBrand } from "../fixtures";
 
 // Fake en memoria de IBrandRepository. getByName replica la collation strength 2 del repo de
 // Mongo: no distingue mayusculas. La insensibilidad la pone el repo, no el service; el
@@ -47,11 +48,17 @@ class FakeBrandRepository implements IBrandRepository {
 
 describe("BrandService", () => {
   let repository: FakeBrandRepository;
+  // Productos activos por brand_id; BrandService solo pregunta cuantos hay.
+  let activeProducts: Map<string, number>;
   let service: BrandService;
 
   beforeEach(() => {
     repository = new FakeBrandRepository();
-    service = new BrandService(repository);
+    activeProducts = new Map();
+    const productRepository = stubRepository<IProductRepository>("products", {
+      countActiveByBrand: async (id: string) => activeProducts.get(id) ?? 0,
+    });
+    service = new BrandService(repository, productRepository);
   });
 
   describe("create", () => {
@@ -179,7 +186,23 @@ describe("BrandService", () => {
   });
 
   describe("delete", () => {
-    it("delega en el repositorio y propaga su resultado", async () => {
+    // Regresion: se borraba y los productos quedaban apuntando a la marca inexistente.
+    it.each([
+      [1, "1 producto"],
+      [3, "3 productos"],
+    ])("con %i productos activos lanza ConflictError y no borra", async (count, texto) => {
+      const { id } = await service.create(validBrand);
+      activeProducts.set(id, count);
+      const remove = jest.spyOn(repository, "delete");
+
+      await expect(service.delete(id)).rejects.toThrow(
+        new ConflictError(`No se puede eliminar la marca: tiene ${texto}`),
+      );
+      expect(remove).not.toHaveBeenCalled();
+      await expect(service.getById(id)).resolves.not.toBeNull();
+    });
+
+    it("sin productos activos borra y propaga el resultado del repositorio", async () => {
       const { id } = await service.create(validBrand);
       const remove = jest.spyOn(repository, "delete");
 
